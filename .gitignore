@@ -1,0 +1,53 @@
+# Node dependencies
+/node_modules/
+
+# Build outputs
+/dist/
+/build/
+/.vite/
+/.parcel-cache/
+/.cache/
+
+# Runtime logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# Environment files
+.env
+.env.*
+.env.local
+
+# Lockfiles (optional: usually committed)
+# package-lock.json
+# pnpm-lock.yaml
+# yarn.lock
+
+# Coverage and test output
+/coverage/
+.nyc_output/
+
+# Editor directories and files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Misc
+*.tgz
+*.zip
+*.gz
+
+# Optional local dev files
+.localhistory/
+
+# Ignore generated node REPL history
+.node_repl_history

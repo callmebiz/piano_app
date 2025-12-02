@@ -1,0 +1,323 @@
+:root{
+  /* sizes */
+  --white-key-width: 34px;
+  --white-key-height: 160px;
+  --black-key-width: 18px;
+  --black-key-height: 100px;
+
+  /* dark theme colors (defaults) */
+  --bg-top: #071025;
+  --bg-bottom: #081226;
+  --panel: rgba(11,18,32,0.6);
+  --muted: #9aa4b2;
+  --accent: #6ee7b7;
+  --key-shadow: rgba(2,6,23,0.25);
+}
+
+/* light theme overrides (applied by adding .light to <html>) */
+.light{
+  --bg-top: #f7fafc;
+  --bg-bottom: #eef5f8;
+  --panel: rgba(255,255,255,0.9);
+  --muted: #5b6b78;
+  --accent: #0ea5a3;
+  --key-shadow: rgba(2,6,23,0.06);
+}
+
+html,body{height:100%;}
+body{
+  margin:0;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+  background: linear-gradient(180deg,var(--bg-top),var(--bg-bottom) 40%);
+  color:var(--muted);
+  -webkit-font-smoothing:antialiased;
+}
+
+/* Global page header (outside piano) */
+.app header h1{margin:0;padding:12px 18px;color:var(--accent)}
+
+/* Bottom dock */
+.keyboard-wrapper{
+  position:fixed;left:0;right:0;bottom:0;
+  padding:8px 18px 20px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  border-top:1px solid rgba(255,255,255,0.03);
+  backdrop-filter: blur(6px);
+  z-index:999;
+}
+.keyboard-wrapper.collapsed{height:48px;padding:6px 18px}
+
+/* header */
+.piano-header{display:flex;align-items:center;justify-content:space-between;padding:6px 10px;position:relative}
+.piano-title{font-weight:700;color:var(--accent);font-size:14px}
+
+/* centered handle */
+.kbd-handle{height:8px;width:56px;border-radius:6px;background:linear-gradient(180deg,#e6eef6,#bcd7c9);cursor:ns-resize}
+.piano-header .kbd-handle{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)}
+
+/* right controls */
+.piano-right{display:flex;gap:12px;align-items:center;margin-left:auto}
+.piano-controls{display:flex;gap:8px;align-items:center}
+.show-keys-label{font-size:13px;color:var(--muted);margin-right:6px}
+
+/* toggles */
+.toggle{padding:6px 10px;border-radius:999px;background:transparent;border:1px solid transparent;cursor:pointer;font-size:13px;color:var(--muted);transition:all .12s ease}
+.toggle:hover{transform:translateY(-1px)}
+.toggle.active{background:var(--accent);color:#071025}
+
+.piano-actions{display:flex;align-items:center;gap:8px}
+.collapse-btn{padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:var(--muted);cursor:pointer}
+
+/* keyboard area */
+.keyboard{display:flex;align-items:flex-start;justify-content:center;height:var(--white-key-height);position:relative;overflow:auto;padding:12px 6px 18px;gap:0}
+.key{box-sizing:border-box;display:flex;align-items:flex-end;justify-content:center;position:relative;user-select:none;transition:background .12s ease, box-shadow .12s ease, transform .08s ease}
+
+/* white keys: flat top, rounded bottom */
+.white{width:var(--white-key-width);height:var(--white-key-height);background:linear-gradient(180deg,#fff,#f3f3f3);border-radius:0 0 6px 6px;margin:0;border:1px solid rgba(0,0,0,0.12);z-index:1;display:flex;align-items:flex-end;justify-content:center;overflow:hidden;box-shadow:0 3px 6px var(--key-shadow) inset}
+
+/* black keys: flat top, rounded bottom, sit above whites */
+.black{width:calc(var(--black-key-width));height:var(--black-key-height);background:linear-gradient(180deg,#111,#0b0b0b);color:#fff;margin-left:calc(-1 * var(--black-key-width) / 2);margin-right:calc(-1 * var(--black-key-width) / 2);align-self:flex-start;border-radius:0 0 6px 6px;border-top-left-radius:0;border-top-right-radius:0;z-index:6;box-shadow:0 1px 3px rgba(0,0,0,0.18)}
+
+/* labels: positioned at bottom of key, constrained width to avoid bleeding */
+.label{position:absolute;bottom:6px;left:50%;transform:translateX(-50%);font-size:11px;color:var(--muted);width:calc(var(--white-key-width) - 6px);white-space:normal;text-align:center;padding:0 2px;pointer-events:none}
+.black .label{color:#fff}
+
+/* make labels on white keys darker for better contrast */
+.white .label{color:#1f2937}
+.light .white .label{color:#071025}
+
+.white.active{background: linear-gradient(180deg, #fff3b0, #ffd24a); box-shadow: 0 8px 28px rgba(255,190,60,0.22), 0 3px 8px rgba(2,6,23,0.10) inset; border-color: rgba(255,170,30,0.6); transform: translateY(2px)}
+.black.active{background:linear-gradient(180deg,#ffb74d,#ff9800)}
+
+/* smaller shadows */
+.white{box-shadow:0 2px 4px var(--key-shadow) inset}
+.black{box-shadow:0 2px 6px rgba(0,0,0,0.25)}
+
+/* theme toggle button */
+.global-theme-toggle{position:fixed;top:12px;right:12px;z-index:1200}
+.global-theme-toggle button{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:8px;border-radius:8px;color:var(--muted);cursor:pointer}
+
+/* responsive */
+@media (max-width:900px){:root{--white-key-width:28px}}
+@media (max-width:700px){:root{--white-key-width:24px;--white-key-height:120px;--black-key-width:14px;--black-key-height:80px}.piano-header .kbd-handle{width:44px}}
+:root{
+  --sidebar-width: 240px;
+  --piano-height: 220px;
+  /* layout sizes */
+  --white-key-width: 38px;
+  --white-key-height: 160px;
+  --black-key-width: 26px;
+  --black-key-height: 100px;
+
+  /* theme colors */
+  --bg: #0f1724; /* deep slate */
+  --panel: #0b1220;
+  --muted: #9aa4b2;
+  --accent: #6ee7b7; /* mint */
+  --key-shadow: rgba(2,6,23,0.6);
+  --glass: rgba(255,255,255,0.03);
+}
+
+html,body{height:100%;}
+body{
+  :root{
+    /* layout sizes */
+    --white-key-width: 28px;
+    --white-key-height: 160px;
+    --black-key-width: 18px;
+    --black-key-height: 100px;
+
+    /* theme colors (dark) */
+    --bg-top: #071025;
+    --bg-bottom: #081226;
+    --panel: #0b1220;
+    --muted: #9aa4b2;
+    --accent: #6ee7b7; /* mint */
+    --key-shadow: rgba(2,6,23,0.6);
+    --glass: rgba(255,255,255,0.03);
+  }
+
+  html,body{height:100%;}
+  body{
+    margin:0;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+    background: linear-gradient(180deg,var(--bg-top),var(--bg-bottom) 40%);
+    color:var(--muted);
+    -webkit-font-smoothing:antialiased;
+  }
+.piano-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:6px 10px;
+  gap:12px;
+  position:relative;
+}
+.piano-title{font-weight:700;color:var(--accent);font-size:14px}
+
+/* center handle */
+.kbd-handle{
+  height:8px;width:56px;border-radius:6px;background:linear-gradient(180deg,#e6eef6,#bcd7c9);
+  cursor:ns-resize; box-shadow: 0 2px 6px rgba(0,0,0,0.45);
+}
+.piano-header .kbd-handle{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)}
+
+/* right controls */
+.piano-right{display:flex;gap:12px;align-items:center;margin-left:auto}
+.piano-controls{display:flex;gap:8px;align-items:center}
+.show-keys-label{font-size:13px;color:var(--muted);margin-right:6px}
+
+/* pill toggles */
+.toggle{
+  padding:6px 10px;border-radius:999px;background:transparent;border:1px solid transparent;cursor:pointer;font-size:13px;color:var(--muted);
+  transition:all .16s ease;
+}
+.toggle:hover{transform:translateY(-1px)}
+.toggle.active{background:var(--accent);color:#071025;border-color:rgba(0,0,0,0.12);box-shadow:0 6px 18px rgba(13,110,110,0.08)}
+
+.piano-actions{display:flex;align-items:center;gap:8px}
+.collapse-btn{padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.05);background:transparent;color:var(--muted);cursor:pointer}
+
+/* keyboard area */
+.keyboard{
+  display:flex;
+  align-items:flex-start; /* white keys bottom aligned, black keys top */
+  justify-content:center;
+  height:var(--white-key-height);
+  position:relative;
+  overflow:auto;
+  padding:10px 6px 18px;
+  gap:0;
+}
+
+.key{box-sizing:border-box;display:flex;align-items:flex-end;justify-content:center;position:relative;user-select:none}
+
+/* white keys */
+.white{
+  width:var(--white-key-width);
+  height:var(--white-key-height);
+  background: linear-gradient(180deg,#fff,#f3f3f3);
+  border-radius:0 0 6px 6px;
+  margin:0 0 0 0;
+  box-shadow: 0 6px 14px var(--key-shadow) inset, 0 2px 6px rgba(2,6,23,0.25);
+  border:1px solid rgba(0,0,0,0.12);
+  z-index:1;
+  display:flex;align-items:flex-end;justify-content:center;overflow:hidden
+}
+
+/* black keys: positioned relative by flex negative margin approach */
+  .black{
+    width:calc(var(--black-key-width));
+    height:var(--black-key-height);
+    background: linear-gradient(180deg,#111,#0b0b0b);
+    color:#fff;
+    margin-left:calc(-1 * var(--black-key-width) / 2);margin-right:calc(-1 * var(--black-key-width) / 2);
+    align-self:flex-start;border-radius:0 0 6px 6px;
+    z-index:6;box-shadow:0 1px 3px rgba(0,0,0,0.18);
+}
+
+.label{font-size:11px;padding:6px 4px;color:var(--muted);position:absolute;bottom:8px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.0);border-radius:6px;z-index:2}
+.white.active{background: linear-gradient(180deg, #fff3b0, #ffd24a); box-shadow: 0 8px 28px rgba(255,190,60,0.22), 0 3px 8px rgba(2,6,23,0.10) inset; border-color: rgba(255,170,30,0.6); transform: translateY(2px)}
+.black.active{background:linear-gradient(180deg,#ffb74d,#ff9800);box-shadow:0 2px 8px rgba(255,152,0,0.06)}
+
+/* collapsed state style */
+.keyboard-wrapper.collapsed .piano-header{padding:6px 10px}
+.keyboard-wrapper.collapsed .piano-title{font-size:13px}
+
+/* theme toggle (top-right) */
+.global-theme-toggle{position:fixed;top:12px;right:12px;z-index:1200}
+.global-theme-toggle button{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:8px;border-radius:8px;color:var(--muted);cursor:pointer}
+
+/* Light theme overrides */
+.light{
+  --bg: #f7fafc;
+  --panel: #ffffff;
+  --muted: #5b6b78;
+  --accent: #0ea5a3;
+  --key-shadow: rgba(2,6,23,0.08);
+  --glass: rgba(0,0,0,0.02);
+}
+
+/* reduce heavy shadows for keys */
+.white{box-shadow: 0 3px 6px rgba(2,6,23,0.08) inset, 0 1px 3px rgba(2,6,23,0.08)}
+.black{box-shadow: 0 3px 8px rgba(2,6,23,0.18)}
+
+/* ensure black keys sit above labels to avoid bleeding */
+.black{z-index:4}
+.label{z-index:2}
+
+/* responsive tweaks */
+@media (max-width:900px){
+  :root{--white-key-width:24px}
+}
+@media (max-width:700px){
+  :root{--white-key-width:20px;--white-key-height:120px;--black-key-width:12px;--black-key-height:80px}
+  .piano-header .kbd-handle{width:44px}
+}
+
+/* Apps pane on the left */
+.apps-pane{
+  position:fixed;left:0;top:0;bottom:var(--piano-height); /* stops above the piano */
+  width:var(--sidebar-width);display:flex;flex-direction:column;gap:12px;padding:16px 12px;background:var(--panel);color:var(--muted);z-index:950;border-right:1px solid rgba(255,255,255,0.04);box-shadow: 2px 0 8px rgba(2,6,23,0.12);
+}
+.apps-header{font-weight:700;color:var(--accent);font-size:15px;padding:4px 8px}
+.apps-list{display:flex;flex-direction:column;gap:8px}
+.app-item{display:flex;flex-direction:column;align-items:flex-start;padding:10px;border-radius:8px;background:transparent;border:1px solid transparent;color:inherit;cursor:pointer;text-align:left}
+.app-item:hover{background:rgba(255,255,255,0.02)}
+.app-item.active{background:var(--accent);color:#071025}
+.app-title{font-weight:600}
+.app-sub{font-size:12px;color:var(--muted);margin-top:4px}
+.apps-footer{margin-top:auto;font-size:12px;color:var(--muted);padding-top:8px}
+
+/* push content to the right to avoid overlap with apps pane */
+.content{margin-left:var(--sidebar-width);padding:20px;max-width:calc(100% - var(--sidebar-width));box-sizing:border-box}
+
+@media (max-width:900px){
+  .apps-pane{width:200px; --sidebar-width:200px}
+  .content{margin-left:var(--sidebar-width);max-width:calc(100% - var(--sidebar-width))}
+}
+
+@media (max-width:600px){
+  .apps-pane{display:none}
+  .content{margin-left:0;max-width:100%}
+}
+
+/* center inner content area and constrain width for better design */
+.content .content-inner{max-width:1100px;margin:0 auto}
+
+/* ensure content doesn't get covered by piano: use piano height variable */
+.content{padding-bottom:var(--piano-height)}
+
+/* Chord Recognition app styles */
+.chord-app{background:var(--panel);padding:12px;border-radius:10px;margin-bottom:12px;border:1px solid rgba(255,255,255,0.03)}
+.chord-app h2{margin:0 0 8px 0;color:var(--accent)}
+.chord-panels{display:flex;gap:18px;align-items:flex-start}
+.main-match{flex:2;display:flex;align-items:center;justify-content:center}
+.primary{background:transparent;text-align:center;padding:18px}
+.primary.fixed-primary{min-height:260px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.primary-name{font-size:44px;font-weight:900;color:var(--accent);line-height:1}
+.primary-long{font-size:14px;color:var(--muted);margin-top:6px;font-style:italic}
+.primary-sub{font-size:13px;color:var(--muted);margin-top:6px}
+.primary-meta{font-size:12px;color:var(--muted);margin-top:8px}
+.alt-matches{flex:1;min-width:160px}
+.alt-matches h4{margin:14px 0 8px 0;color:var(--muted);font-size:13px}
+.alt-matches ul{list-style:none;padding:0;margin:0}
+.alt{display:flex;justify-content:space-between;gap:8px;padding:8px;border-radius:6px;background:transparent;border:1px solid rgba(255,255,255,0.02);margin-bottom:8px;font-size:14px}
+.alt-name{font-weight:600;color:var(--muted)}
+.alt-meta{font-size:12px;color:var(--muted)}
+
+/* primary grid */
+.primary-grid{margin-top:12px;border-radius:8px;border:1px solid rgba(255,255,255,0.03);overflow:hidden;background:rgba(0,0,0,0.02);max-width:420px;margin-left:auto;margin-right:auto}
+.grid-row{display:grid;grid-template-columns:1fr 1fr 1fr 0.5fr;gap:8px;padding:8px 10px;align-items:center}
+.grid-head{background:rgba(255,255,255,0.02);font-size:12px;color:var(--muted);font-weight:700}
+.grid-row:nth-child(even):not(.grid-head){background:rgba(255,255,255,0.01)}
+.cell-degree{font-weight:700}
+.cell-interval{color:var(--muted)}
+.cell-note{font-family:monospace}
+.cell-present{font-weight:700;color:var(--accent)}
+
+/* place alternatives below the primary match when in vertical layout */
+.alt-below{flex-basis:100%;display:block;margin-top:12px}
+.alt-below ul{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px}
+.alt-below .alt{margin:0}
+.muted{color:var(--muted);padding:8px}

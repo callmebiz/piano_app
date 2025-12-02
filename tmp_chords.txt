@@ -1,0 +1,101 @@
+Basic / Extended Triads
+C⁵ — Fifth
+C — Major
+Cm — Minor
+C° — Diminished
+C⁺ — Augmented
+Csus² — Suspended 2nd
+Csus⁴ — Suspended 4th
+C♭⁵ — Flat Fifth
+C⁶ — Sixth
+Cm⁶ — Minor Sixth
+Sevenths
+C⁷ — Dominant Seventh
+Cm⁷ — Minor Seventh
+C°⁷ — Diminished Seventh
+CM⁷ or CΔ⁷ — Major Seventh
+CmΔ⁷ — Minor Major Seventh
+C⁷sus² — Seventh Suspended 2nd
+C⁷sus⁴ — Seventh Suspended 4th
+C⁷♭⁵ — Seventh Flat Fifth
+C⁷⁺⁵ — Seventh Raised Fifth
+Cm⁷♭⁵ (ø) — Half-Diminished / Minor Seventh Flat Five
+Cm⁷⁺⁵ — Minor Seventh Raised Fifth
+Added-Tone Chords
+Cadd⁹ — Added 9th
+Cmadd⁹ — Minor Added 9th
+Cadd¹¹ — Added 11th
+Cmadd¹¹ — Minor Added 11th
+Cadd¹³ — Added 13th
+Cmadd¹³ — Minor Added 13th
+Six–Seven Combinations
+C⁷/⁶ — Seven-Six
+C⁹/⁶ — Nine-Six
+Cm⁹/⁶ — Minor Nine-Six
+Ninth Chords
+C⁹ — Ninth
+Cm⁹ — Minor Ninth
+C♭⁹ — Flat Ninth
+Cm♭⁹ — Minor Flat Ninth
+C⁹⁺ — Augmented Ninth
+C⁹sus⁴ — Ninth Suspended 4th
+C⁹♭⁵ — Ninth Flat Fifth
+C⁹⁺⁵ — Ninth Raised Fifth
+Altered Ninth Variants
+Cm⁹♭⁵ — Minor Ninth Flat Fifth
+Cm⁹⁺⁵ — Minor Ninth Raised Fifth
+Cm⁹⁷ — Minor Ninth with Major Seventh
+C♭⁹sus⁴ — Flat Ninth Suspended 4th
+C♭⁹♭⁵ — Flat Ninth Flat Fifth
+C♭⁹⁺⁵ — Flat Ninth Raised Fifth
+C♭⁹⁷ — Flat Ninth with Major Seventh
+Cm♭⁹♭⁵ — Minor, Flat 9th, Flat 5
+Cm♭⁹⁺⁵ — Minor, Flat 9th, Raised 5
+Major Ninths
+CM⁹ / CΔ⁹ — Major Ninth
+11th Chords
+C¹¹ — Eleventh
+Cm¹¹ — Minor Eleventh
+CM¹¹ / CΔ¹¹ — Major Eleventh
+Altered 11ths
+C¹¹♭⁵ — Eleventh Flat Fifth
+C¹¹⁺⁵ — Eleventh Raised Fifth
+C¹¹⁷ — Eleventh with Major Seventh
+C¹¹♭⁹ — Eleventh Flat Ninth
+C¹¹⁺⁹ — Eleventh Raised Ninth
+Minor Alterations
+Cm¹¹♭⁵ — Minor Eleventh Flat Fifth
+Cm¹¹⁺⁵ — Minor Eleventh Raised Fifth
+Cm¹¹⁷ — Minor Eleventh with Major Seventh
+Cm¹¹♭⁹ — Minor Eleventh Flat Ninth
+Augmented 11th Extensions
+C¹¹⁺⁵ (++) — Augmented 11th +5
+C¹¹⁺⁷ — Augmented 11th +7
+C¹¹♭⁹⁺ — Augmented 11th Flat Ninth
+C¹¹⁺⁹ — Augmented 11th Raised Ninth
+Cm¹¹⁺⁵ — Minor Augmented 11th +5
+Cm¹¹⁺⁷ — Minor Augmented 11th +7
+Cm¹¹♭⁹⁺ — Minor Augmented 11th Flat Ninth
+13th Chords
+C¹³ — Thirteenth
+CM¹³ / CΔ¹³ — Major Thirteenth
+Cm¹³ — Minor Thirteenth
+Altered 13ths
+C¹³♭⁵ — Thirteenth Flat 5
+C¹³⁺⁵ — Thirteenth Raised 5
+C¹³⁷ — Thirteenth with Major Seventh
+C¹³♭⁹ — Thirteenth Flat Ninth
+C¹³⁺⁹ — Thirteenth Raised Ninth
+Augmented-11 Thirteenths
+C¹³#¹¹⁺⁵ — Thirteenth Augmented 11, Raised 5
+C¹³#¹¹⁷ — Thirteenth Augmented 11, Major 7
+C¹³#¹¹♭⁹ — Thirteenth Augmented 11, Flat 9
+C¹³#¹¹⁺⁹ — Thirteenth Augmented 11, Raised 9
+Minor equivalents:
+Cm¹³♭⁵ — Minor Thirteenth Flat Five
+Cm¹³⁺⁵ — Minor Thirteenth Raised Five
+Cm¹³⁷ — Minor Thirteenth with Major 7
+Cm¹³♭⁹ — Minor Thirteenth Flat Ninth
+Cm¹³#¹¹⁷ — Minor Thirteenth Augmented 11, 7
+Cm¹³#¹¹♭⁹ — Minor Thirteenth Augmented 11, Flat 9
+Cm¹³#¹¹♭⁵ — Minor Thirteenth Augmented 11, Flat 5
