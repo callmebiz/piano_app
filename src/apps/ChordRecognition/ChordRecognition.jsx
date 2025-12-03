@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react'
 import { recognize, pcsToNotes, ROOTS, formatMatch, intervalName } from '../../lib/chords'
 
-export default function ChordRecognition({ pressedNotes }) {
+export default function ChordRecognition({ pressedNotes, debug = false }) {
   // pressedNotes expected as Set or Array of MIDI numbers
   const pressedArr = useMemo(() => Array.isArray(pressedNotes) ? pressedNotes : Array.from(pressedNotes || []), [pressedNotes])
 
@@ -10,7 +10,10 @@ export default function ChordRecognition({ pressedNotes }) {
 
   return (
     <section className="chord-app">
-      <h2>Chord Recognition</h2>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',width:'100%'}}>
+        <h2 style={{margin:0}}>Chord Recognition</h2>
+        <div style={{marginLeft:12,fontSize:14}}>{debug ? <span title="Debug enabled">🐞 Debug</span> : null}</div>
+      </div>
       <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:12}}>
         {formatted.length === 0 ? (
           <div className="muted">No matching chords</div>

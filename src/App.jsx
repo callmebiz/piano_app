@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { initMIDI } from './midi'
 import Keyboard from './components/Keyboard'
 import AppsPane from './components/AppsPane'
@@ -57,10 +57,12 @@ export default function App() {
   const [selectedApp, setSelectedApp] = useState('chord')
   const [keyboardTargetMidis, setKeyboardTargetMidis] = useState(new Set())
   const [keyboardTargetPCs, setKeyboardTargetPCs] = useState(new Set())
+  const [debugChord, setDebugChord] = useState(false)
+  const [debugPlay, setDebugPlay] = useState(false)
 
   // Handler used by apps to set keyboard targets. Accepts either a Set (treated as MIDI set)
   // or an object { mids: Set, pcs: Set } so apps can hide visual mids while still providing pcs
-  const setKeyboardTargets = (val) => {
+  const setKeyboardTargets = useCallback((val) => {
     try {
       if (!val) { setKeyboardTargetMidis(new Set()); setKeyboardTargetPCs(new Set()); return }
       if (val instanceof Set) {
@@ -80,13 +82,19 @@ export default function App() {
     } catch (e) {
       setKeyboardTargetMidis(new Set()); setKeyboardTargetPCs(new Set())
     }
-  }
+  }, [setKeyboardTargetMidis, setKeyboardTargetPCs])
 
   return (
     <div className="app" style={{ ['--piano-height']: `${keyboardHeightPx}px`, ['--sidebar-width']: '240px' }}>
       <AppsPane active={selectedApp} onSelect={(id) => setSelectedApp(id)} />
       <div className="global-theme-toggle">
         <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label="Toggle theme">{theme === 'dark' ? '🌙' : '☀️'}</button>
+        {selectedApp === 'chord' ? (
+          <button onClick={() => setDebugChord(d => !d)} aria-pressed={debugChord} title="Toggle Debug for ChordRecognition" style={{marginLeft:8}}>{debugChord ? '⚙️' : '⚙️'}</button>
+        ) : null}
+        {selectedApp === 'play' ? (
+          <button onClick={() => setDebugPlay(d => !d)} aria-pressed={debugPlay} title="Toggle Debug for PlayTheChord" style={{marginLeft:8}}>{debugPlay ? '⚙️' : '⚙️'}</button>
+        ) : null}
       </div>
       <div className="content">
         <div className="content-inner">
@@ -99,8 +107,8 @@ export default function App() {
           <main>
             <div className="app-view">
               <ErrorBoundary>
-                {selectedApp === 'chord' && <ChordRecognition pressedNotes={pressed} />}
-                {selectedApp === 'play' && <PlayTheChord pressedNotes={pressed} setKeyboardTargetPCs={setKeyboardTargets} />}
+                {selectedApp === 'chord' && <ChordRecognition pressedNotes={pressed} debug={debugChord} />}
+                {selectedApp === 'play' && <PlayTheChord pressedNotes={pressed} setKeyboardTargetPCs={setKeyboardTargets} externalDebug={debugPlay} setExternalDebug={setDebugPlay} />}
               </ErrorBoundary>
             </div>
 

@@ -4,7 +4,7 @@ import { formatMatch } from '../../lib/chords'
 
 function randomInt(max) { return Math.floor(Math.random() * max) }
 
-export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () => {} }) {
+export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () => {}, externalDebug = false, setExternalDebug = null }) {
   const templates = useMemo(() => getTemplates(), [])
 
   const centerCardRef = useRef(null)
@@ -37,25 +37,20 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
   }
 
   const loadCategories = () => {
-    try {
-      const raw = localStorage.getItem('play:categories')
-      if (raw) return JSON.parse(raw)
-    } catch (e) {}
-    // default: only Major and Minor on
+    // Do not read persisted main app filters; always start with defaults here
     const def = {}
     for (const k of Object.keys(CATEGORIES)) def[k] = false
     if (def.hasOwnProperty('major')) def.major = true
     if (def.hasOwnProperty('minor')) def.minor = true
+    if (def.hasOwnProperty('diminished')) def.diminished = true
+    if (def.hasOwnProperty('augmented')) def.augmented = true
+    if (def.hasOwnProperty('suspended')) def.suspended = true
     return def
   }
 
   const loadRoots = () => {
-    try {
-      const raw = localStorage.getItem('play:roots')
-      if (raw) return new Set(JSON.parse(raw))
-    } catch (e) {}
-    // default: all roots allowed (0..11)
-    return new Set(Array.from({length:12}, (_,i) => i))
+    // Do not read persisted main app roots; default to naturals only
+    return new Set([0,2,4,5,7,9,11])
   }
 
   const [selectedCats, setSelectedCats] = useState(loadCategories)
@@ -80,8 +75,69 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
   const [holdSeconds, setHoldSeconds] = useState(loadHoldSeconds)
   useEffect(() => { try { localStorage.setItem('play:holdSeconds', String(holdSeconds)) } catch(e){} }, [holdSeconds])
 
-  useEffect(() => { try { localStorage.setItem('play:categories', JSON.stringify(selectedCats)) } catch(e){} }, [selectedCats])
-  useEffect(() => { try { localStorage.setItem('play:roots', JSON.stringify(Array.from(selectedRoots))) } catch(e){} }, [selectedRoots])
+  // main app filters are intentionally non-persistent (initialized each session)
+
+  // --- Stats modal independent filters (initialized same as play filters but independent)
+  const loadStatsCategories = () => {
+    try {
+      const raw = localStorage.getItem('play:stats:categories')
+      if (!raw) return loadCategories()
+      const parsed = JSON.parse(raw)
+      // Validate shape: must be an object with at least one matching category key
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        const out = {}
+        let seenAny = false
+        for (const k of Object.keys(CATEGORIES)) {
+          if (Object.prototype.hasOwnProperty.call(parsed, k)) {
+            out[k] = !!parsed[k]
+            seenAny = true
+          }
+        }
+        if (seenAny) return out
+      }
+    } catch (e) {}
+    // fallback to same defaults as loadCategories
+    return loadCategories()
+  }
+  const [statsSelectedCats, setStatsSelectedCats] = useState(loadStatsCategories)
+  useEffect(() => { try { localStorage.setItem('play:stats:categories', JSON.stringify(statsSelectedCats)) } catch(e){} }, [statsSelectedCats])
+
+  const loadStatsRoots = () => {
+    try {
+      const raw = localStorage.getItem('play:stats:roots')
+      if (!raw) return loadRoots()
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) {
+        const sel = new Set()
+        for (const v of parsed) {
+          const n = Number(v)
+          if (!Number.isNaN(n) && n >= 0 && n < 12) sel.add(n)
+        }
+        if (sel.size > 0) return sel
+      }
+    } catch (e) {}
+    return loadRoots()
+  }
+  const [statsSelectedRoots, setStatsSelectedRoots] = useState(loadStatsRoots)
+  useEffect(() => { try { localStorage.setItem('play:stats:roots', JSON.stringify(Array.from(statsSelectedRoots))) } catch(e){} }, [statsSelectedRoots])
+
+  // Helpers for stats modal filters
+  const selectAllStatsCats = () => {
+    const out = {}
+    for (const k of Object.keys(CATEGORIES)) out[k] = true
+    setStatsSelectedCats(out)
+  }
+  const clearAllStatsCats = () => {
+    const out = {}
+    for (const k of Object.keys(CATEGORIES)) out[k] = false
+    setStatsSelectedCats(out)
+  }
+  const selectAllStatsRoots = () => {
+    setStatsSelectedRoots(new Set(Array.from({length:12}, (_,i) => i)))
+  }
+  const clearAllStatsRoots = () => {
+    setStatsSelectedRoots(new Set())
+  }
 
   // Helpers: select or clear all chord-type filters
   const selectAllCats = () => {
@@ -114,6 +170,14 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
     }
     return s
   }, [selectedCats])
+
+  const statsAllowedTypes = useMemo(() => {
+    const s = new Set()
+    for (const k of Object.keys(statsSelectedCats || {})) if (statsSelectedCats[k]) {
+      for (const t of (CATEGORIES[k]?.types || [])) s.add(t)
+    }
+    return s
+  }, [statsSelectedCats])
 
   const allowedRoots = useMemo(() => new Set(Array.from(selectedRoots)), [selectedRoots])
 
@@ -253,8 +317,87 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
   const [showStats, setShowStats] = useState(false)
   const [stats, setStats] = useState(() => {
     try { const raw = localStorage.getItem('play:stats'); if (raw) return JSON.parse(raw) } catch(e){}
-    return { byType: {}, byRoot: {} }
+    return { byType: {}, byRoot: {}, byChord: {} }
   })
+  const loadTrackStats = () => {
+    try { const raw = localStorage.getItem('play:trackStats'); if (raw) return JSON.parse(raw) } catch(e){}
+    return false
+  }
+  const [trackStats, setTrackStats] = useState(loadTrackStats)
+  useEffect(() => { try { localStorage.setItem('play:trackStats', JSON.stringify(trackStats)) } catch(e){} }, [trackStats])
+
+  // Stats table sorting
+  const [statsSortKey, setStatsSortKey] = useState('attempts')
+  const [statsSortDir, setStatsSortDir] = useState('desc')
+  const toggleStatsSort = (key) => {
+    if (statsSortKey === key) setStatsSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setStatsSortKey(key); setStatsSortDir('desc') }
+  }
+
+  // Debug helpers: allow forcing a template and forcing a stat write for testing
+  const [debugMode, setDebugMode] = useState(false)
+  const [debugIndex, setDebugIndex] = useState(0)
+
+  // keep debugIndex valid when allowedTemplates changes
+  useEffect(() => {
+    const pool = allowedTemplates && allowedTemplates.length > 0 ? allowedTemplates : templates
+    if (!pool || pool.length === 0) {
+      setDebugIndex(0)
+      return
+    }
+    if (debugIndex >= pool.length) setDebugIndex(0)
+  }, [allowedTemplates, templates])
+
+  const forceSetCurrentFromIndex = () => {
+    try {
+      const pool = allowedTemplates || []
+      const t = pool[debugIndex]
+      if (t) {
+        setCurrent(t)
+        setStatus('idle')
+        setHoldProgress(0)
+        setPendingNext(null)
+      }
+    } catch (e) {}
+  }
+
+  const forceRecordNow = (tmpl = null, correct = true, timeMs = 0) => {
+    try {
+      const pool = allowedTemplates || []
+      const target = tmpl || pool[debugIndex] || current
+      if (!target) return
+      // write directly to stats (bypass trackStats) for debugging
+      const s = JSON.parse(JSON.stringify(stats || { byType: {}, byRoot: {} }))
+      const t = target.type
+      if (!s.byType[t]) s.byType[t] = { attempts: 0, correct: 0, totalTimeMs: 0 }
+      s.byType[t].attempts += 1
+      if (correct) { s.byType[t].correct += 1; s.byType[t].totalTimeMs += (timeMs || 0) }
+      const r = String(target.root)
+      if (!s.byRoot[r]) s.byRoot[r] = { attempts: 0, correct: 0, totalTimeMs: 0 }
+      s.byRoot[r].attempts += 1
+      if (correct) { s.byRoot[r].correct += 1; s.byRoot[r].totalTimeMs += (timeMs || 0) }
+      saveStats(s)
+    } catch (e) {}
+  }
+
+  // sync external debug state when provided by parent App
+  useEffect(() => {
+    try {
+      if (typeof externalDebug === 'boolean') setDebugMode(externalDebug)
+    } catch (e) {}
+  }, [externalDebug])
+
+  // Start per-chord timing for free-play when tracking is enabled and we're not in a timed round
+  useEffect(() => {
+    try {
+      if (trackStats && current && !roundActive) {
+        // if there is no start timestamp, start one for this suggestion
+        setRoundStartTs(performance.now())
+      }
+    } catch (e) {}
+  }, [current, trackStats, roundActive])
+
+  // no stats view toggle: consolidated stats modal
   const countdownRef = useRef(null)
   const holdTimerRef = useRef(null)
   const holdStartRef = useRef(null)
@@ -465,13 +608,18 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
   }
 
   const resetStats = () => {
-    const s = { byType: {}, byRoot: {} }
+    const s = { byType: {}, byRoot: {}, byChord: {} }
     saveStats(s)
   }
 
   const recordRound = (tmpl, correct, timeMs) => {
     if (!tmpl) return
-    const s = JSON.parse(JSON.stringify(stats || { byType: {}, byRoot: {} }))
+    if (!trackStats) return
+    try { console.debug('recordRound:', tmpl && tmpl.type, 'root', tmpl && tmpl.root, 'correct', correct, 'timeMs', timeMs) } catch(e){}
+    // read latest stats from localStorage to reduce race overwrites
+    let base = { byType: {}, byRoot: {}, byChord: {} }
+    try { const raw = localStorage.getItem('play:stats'); if (raw) base = JSON.parse(raw) } catch(e){}
+    const s = JSON.parse(JSON.stringify(base))
     // by type
     const t = tmpl.type
     if (!s.byType[t]) s.byType[t] = { attempts: 0, correct: 0, totalTimeMs: 0 }
@@ -482,6 +630,12 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
     if (!s.byRoot[r]) s.byRoot[r] = { attempts: 0, correct: 0, totalTimeMs: 0 }
     s.byRoot[r].attempts += 1
     if (correct) { s.byRoot[r].correct += 1; s.byRoot[r].totalTimeMs += (timeMs || 0) }
+    // by chord (type + root) - prevents collisions and preserves per-root stats per type
+    const chordKey = `${t}@${r}`
+    if (!s.byChord) s.byChord = {}
+    if (!s.byChord[chordKey]) s.byChord[chordKey] = { attempts: 0, correct: 0, totalTimeMs: 0, type: t, root: Number(r) }
+    s.byChord[chordKey].attempts += 1
+    if (correct) { s.byChord[chordKey].correct += 1; s.byChord[chordKey].totalTimeMs += (timeMs || 0) }
     saveStats(s)
   }
 
@@ -535,7 +689,9 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
             holdStartRef.current = null
             setHoldProgress(1)
             // commit solved behavior depending on roundActive
-            const elapsedRound = roundStartTs ? (performance.now() - roundStartTs) : 0
+            const rawElapsed = roundStartTs ? (performance.now() - roundStartTs) : 0
+            // subtract hold time (the required holdSeconds) from the recorded elapsed
+            const elapsedRound = Math.max(0, rawElapsed - (holdSeconds * 1000))
             if (roundActive) {
               setRoundActive(false)
               setStatus('solved')
@@ -544,13 +700,14 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
               const pool = (allowedTemplates && allowedTemplates.length > 0) ? allowedTemplates : []
               if (pool.length > 0) setPendingNext(pickDifferent(pool, current)); else setPendingNext(null)
             } else {
-              // free-play
+              // free-play: also record successes so user's plays appear in stats
               const pool = (allowedTemplates && allowedTemplates.length > 0) ? allowedTemplates : []
+              setStatus('solved')
+              // record free-play results as well (recordRound will no-op if trackStats is false)
+              recordRound(current, !hadWrongRef.current, elapsedRound)
               if (pool.length > 0) {
-                setStatus('solved')
                 setPendingNext(pickDifferent(pool, current))
               } else {
-                setStatus('solved')
                 setPendingNext(null)
               }
             }
@@ -579,7 +736,8 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
       setStatus('idle')
       setHadWrongPress(false)
       setRoundCanceled(false)
-      setRoundStartTs(null)
+      // new suggestion — start per-chord timer if tracking is enabled and not in a timed round
+      if (trackStats) setRoundStartTs(performance.now())
     }
   }, [pressedPCs, status, pendingNext])
 
@@ -601,6 +759,8 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
         setRoundCanceled(false)
         setHadWrongPress(false)
         setRoundStartTs(performance.now())
+        // enable stat tracking when a timed round actually starts (after the countdown)
+        try { setTrackStats(true) } catch (e) {}
         setStatus('running')
       } else {
         setCountdown(c)
@@ -616,7 +776,42 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
       setRoundCanceled(true)
       setStatus('stopped')
     }
+    // Turning Stop should also disable stat tracking
+    try { setTrackStats(false) } catch (e) {}
+    // clear per-chord timer
+    setRoundStartTs(null)
   }
+
+  // Skip helper: pick a different allowed template and reset round state
+  const skip = () => {
+    if (!allowedTemplates || allowedTemplates.length === 0) return
+    const next = pickDifferent(allowedTemplates, current)
+    if (next) {
+      setCurrent(next)
+      setRoundActive(false)
+      setRoundCanceled(false)
+      setHadWrongPress(false)
+      setPendingNext(null)
+      setStatus('idle')
+      setRoundStartTs(null)
+    }
+  }
+
+  // Keyboard shortcut: press 'S' to skip (ignore when typing in inputs)
+  useEffect(() => {
+    const handler = (e) => {
+      try {
+        if (e.key !== 's' && e.key !== 'S' && e.code !== 'KeyS') return
+        const tgt = e.target
+        const tag = tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA' || tgt.isContentEditable)
+        if (tag) return
+        e.preventDefault()
+        skip()
+      } catch (err) {}
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [allowedTemplates, current])
 
   const showName = () => {
     if (!current) return ''
@@ -782,6 +977,26 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
             </div>
             <div style={{display:'flex',gap:8,alignItems:'center'}}>
               <button className="primary-btn" onClick={() => setShowStats(true)}>View Stats</button>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:6}}>
+                {debugMode ? (
+                  <>
+                    { (allowedTemplates && allowedTemplates.length > 0) ? (
+                      <>
+                        <select value={debugIndex} onChange={e => setDebugIndex(Number(e.target.value))} style={{padding:6,borderRadius:6}}>
+                          {allowedTemplates.map((t,i) => {
+                            const fm = formatMatch({ root: t.root, rootName: ROOTS[t.root], type: t.type, chordSize: t.size }, [])
+                            return (<option key={`dbg-${i}`} value={i}>{`${fm.displayName} (${ROOTS[t.root]} ${t.type})`}</option>)
+                          })}
+                        </select>
+                        <button className="primary-btn" onClick={forceSetCurrentFromIndex}>Force Set</button>
+                        <button className="primary-btn" onClick={() => forceRecordNow(null, true, 0)}>Force Record</button>
+                      </>
+                    ) : (
+                      <div style={{color:'var(--muted)',fontSize:13}}>No allowed templates (adjust filters)</div>
+                    )}
+                  </>
+                ) : null}
+              </div>
               <button
                 className="primary-btn"
                 onClick={() => {
@@ -799,11 +1014,18 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
                 }}
                 disabled={!allowedTemplates || allowedTemplates.length === 0}
               >
-                Skip
+                Skip (S)
               </button>
               <div style={{marginLeft:12}}>{countdown != null ? <span style={{fontSize:18,fontWeight:800}}>Starting in {countdown}…</span> : null}</div>
               <div style={{marginLeft:12,fontSize:13,color:'var(--muted)'}}>
                 <strong>Score:</strong> {score}
+              </div>
+              <div style={{marginLeft:12,padding:'6px 8px',borderRadius:8,fontWeight:700,display:'flex',alignItems:'center',gap:8,
+                background: trackStats ? 'var(--accent)' : 'transparent',
+                color: trackStats ? '#071025' : 'var(--muted)',
+                border: trackStats ? 'none' : '1px solid rgba(255,255,255,0.04)'
+              }}>
+                <div style={{fontWeight:900}}>{trackStats ? 'Stat tracking: ON' : 'Stat tracking: OFF'}</div>
               </div>
             </div>
           </div>
@@ -814,44 +1036,119 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
         <div className="stats-modal">
           <h3>Play The Chord — Stats</h3>
           <button className="close-btn" onClick={() => setShowStats(false)}>Close</button>
-          <div style={{display:'flex',gap:18,marginTop:12}}>
-            <div style={{flex:1}}>
-              <h4 style={{color:'var(--muted)'}}>By Type</h4>
-              <table style={{width:'100%',borderCollapse:'collapse'}}>
-                <thead><tr><th>Type</th><th>Attempts</th><th>Correct</th><th>Accuracy</th><th>Avg Speed (ms)</th></tr></thead>
-                <tbody>
-                  {Object.keys(stats.byType || {}).length === 0 ? <tr><td colSpan={5} className="muted">No data</td></tr> : Object.entries(stats.byType).map(([t,o]) => (
-                    <tr key={t} style={{borderTop:'1px solid rgba(255,255,255,0.03)'}}>
-                      <td style={{padding:6}}>{t}</td>
-                      <td style={{padding:6}}>{o.attempts}</td>
-                      <td style={{padding:6}}>{o.correct}</td>
-                      <td style={{padding:6}}>{o.attempts? Math.round((o.correct / o.attempts)*100) + '%' : '—'}</td>
-                      <td style={{padding:6}}>{o.correct? Math.round(o.totalTimeMs / o.correct) : '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <div style={{display:'flex',alignItems:'center',gap:12,marginTop:12}}>
+            <div style={{marginLeft:'auto'}}>
+              <button className="primary-btn" onClick={resetStats}>Reset Stats</button>
+              <button className="play-cat-btn" style={{marginLeft:8}} onClick={() => { setStatsSelectedCats(loadCategories()); setStatsSelectedRoots(loadRoots()) }}>Reset Filters</button>
             </div>
-            <div style={{width:260}}>
-              <h4 style={{color:'var(--muted)'}}>By Root</h4>
-              <table style={{width:'100%'}}>
-                <thead><tr><th>Root</th><th>Attempts</th><th>Correct</th><th>Acc</th><th>Avg ms</th></tr></thead>
-                <tbody>
-                  {Object.keys(stats.byRoot || {}).length === 0 ? <tr><td colSpan={5} className="muted">No data</td></tr> : Object.entries(stats.byRoot).map(([r,o]) => (
-                    <tr key={r} style={{borderTop:'1px solid rgba(255,255,255,0.03)'}}>
-                      <td style={{padding:6}}>{ROOTS[Number(r)]}</td>
-                      <td style={{padding:6}}>{o.attempts}</td>
-                      <td style={{padding:6}}>{o.correct}</td>
-                      <td style={{padding:6}}>{o.attempts? Math.round((o.correct / o.attempts)*100) + '%' : '—'}</td>
-                      <td style={{padding:6}}>{o.correct? Math.round(o.totalTimeMs / o.correct) : '—'}</td>
-                    </tr>
+          </div>
+
+          <div style={{marginTop:12}}>
+            {/* Combined filters: Type filters + Root filters together */}
+            <div style={{display:'flex',gap:18,flexWrap:'wrap',alignItems:'flex-start'}}>
+              <div style={{minWidth:320}}>
+                <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:8}}>
+                  <div className="filter-title" style={{marginRight:8}}>Type Filters</div>
+                  <button className="play-cat-btn" onClick={selectAllStatsCats}>Select All</button>
+                  <button className="play-cat-btn" onClick={clearAllStatsCats}>Clear All</button>
+                </div>
+                <div className="cats-row" role="toolbar" aria-label="Stats type filters" style={{display:'flex',flexWrap:'wrap',gap:6}}>
+                  {Object.keys(CATEGORIES).map(k => (
+                    <button key={`s-${k}`} className={`play-cat-btn ${statsSelectedCats[k] ? 'active' : ''}`} onClick={() => setStatsSelectedCats(s => ({...s, [k]: !s[k]}))}>
+                      {CATEGORIES[k].label}
+                    </button>
                   ))}
-                </tbody>
-              </table>
-              <div style={{marginTop:8}}>
-                <button className="primary-btn" onClick={resetStats}>Reset Stats</button>
+                </div>
+              </div>
+
+              <div style={{minWidth:260}}>
+                <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:8}}>
+                  <div className="filter-title" style={{marginRight:8}}>Root Filters</div>
+                  <button className="play-cat-btn" onClick={selectAllStatsRoots}>Select All</button>
+                  <button className="play-cat-btn" onClick={clearAllStatsRoots}>Clear All</button>
+                  <button className="play-cat-btn" onClick={() => setStatsSelectedRoots(new Set([0,2,4,5,7,9,11]))}>Naturals Only</button>
+                </div>
+                <div className="roots" style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:12}}>
+                  {ROOTS.map((rName, rIdx) => (
+                    <button key={`sr-${rIdx}`} className={`play-root-btn play-cat-btn ${statsSelectedRoots.has(rIdx)?'active':''}`} onClick={() => {
+                      setStatsSelectedRoots(prev => {
+                        const s = new Set(prev)
+                        if (s.has(rIdx)) s.delete(rIdx); else s.add(rIdx)
+                        return s
+                      })
+                    }}>{rName}</button>
+                  ))}
+                </div>
               </div>
             </div>
+
+            <h4 style={{color:'var(--muted)',marginTop:6}}>Stats</h4>
+            <table className="stats-table" style={{width:'100%'}}>
+              <thead>
+                <tr>
+                  <th className="sortable" onClick={() => toggleStatsSort('chord')}>Chord {statsSortKey === 'chord' ? (statsSortDir === 'asc' ? '▲' : '▼') : ''}</th>
+                  <th className="sortable" onClick={() => toggleStatsSort('description')}>Description {statsSortKey === 'description' ? (statsSortDir === 'asc' ? '▲' : '▼') : ''}</th>
+                  <th className="sortable" onClick={() => toggleStatsSort('root')}>Root {statsSortKey === 'root' ? (statsSortDir === 'asc' ? '▲' : '▼') : ''}</th>
+                  <th className="sortable" onClick={() => toggleStatsSort('accuracy')}>Accuracy {statsSortKey === 'accuracy' ? (statsSortDir === 'asc' ? '▲' : '▼') : ''}</th>
+                  <th className="sortable" onClick={() => toggleStatsSort('attempts')}>Attempts {statsSortKey === 'attempts' ? (statsSortDir === 'asc' ? '▲' : '▼') : ''}</th>
+                  <th className="sortable" onClick={() => toggleStatsSort('correct')}>Correct {statsSortKey === 'correct' ? (statsSortDir === 'asc' ? '▲' : '▼') : ''}</th>
+                  <th className="sortable" onClick={() => toggleStatsSort('avg')}>Avg Speed (ms) {statsSortKey === 'avg' ? (statsSortDir === 'asc' ? '▲' : '▼') : ''}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  const entries = Object.entries((stats && stats.byChord) || {})
+                  const rows = []
+                    for (const [key, o] of entries) {
+                    const [t, rStr] = key.split('@')
+                    // type filter via tags
+                    const tags = TYPE_TAGS[t] || []
+                    if (tags.length === 0) {
+                      if (!statsAllowedTypes.has(t)) continue
+                    } else {
+                      let ok = true
+                      for (const tg of tags) if (!statsSelectedCats[tg]) { ok = false; break }
+                      if (!ok) continue
+                    }
+                    const rnum = Number(rStr)
+                    if (statsSelectedRoots && statsSelectedRoots.size > 0 && !statsSelectedRoots.has(rnum)) continue
+                    const fakeMatch = { root: rnum, rootName: ROOTS[rnum], type: t, chordSize: 0 }
+                    const fm = formatMatch(fakeMatch, [])
+                    const avg = o.correct ? Math.round(o.totalTimeMs / o.correct) : Infinity
+                    const accuracy = o.attempts ? (o.correct / o.attempts) * 100 : 0
+                    rows.push({ key, entry: o, type: t, root: rnum, fm, avg, accuracy })
+                  }
+
+                  if (rows.length === 0) return (<tr><td colSpan={6} className="muted">No data</td></tr>)
+
+                  rows.sort((a,b) => {
+                    const dir = statsSortDir === 'asc' ? 1 : -1
+                    switch (statsSortKey) {
+                      case 'chord': return a.fm.displayName.localeCompare(b.fm.displayName) * dir
+                      case 'description': return a.fm.longName.localeCompare(b.fm.longName) * dir
+                      case 'root': return (a.root - b.root) * dir
+                      case 'accuracy': return (a.accuracy - b.accuracy) * dir
+                      case 'attempts': return (a.entry.attempts - b.entry.attempts) * dir
+                      case 'correct': return (a.entry.correct - b.entry.correct) * dir
+                      case 'avg': return (a.avg - b.avg) * dir
+                      default: return 0
+                    }
+                  })
+
+                  return rows.map(r => (
+                    <tr key={r.key} style={{borderTop:'1px solid rgba(255,255,255,0.03)'}}>
+                      <td style={{padding:6,overflow:'hidden',whiteSpace:'nowrap',textOverflow:'ellipsis'}}>{r.fm.displayName}</td>
+                      <td style={{padding:6,overflow:'hidden',whiteSpace:'nowrap',textOverflow:'ellipsis'}}>{r.fm.longName}</td>
+                      <td style={{padding:6}}>{ROOTS[r.root]}</td>
+                      <td style={{padding:6}}>{`${r.accuracy.toFixed(1)}% (${r.entry.correct}/${r.entry.attempts})`}</td>
+                      <td style={{padding:6}}>{r.entry.attempts}</td>
+                      <td style={{padding:6}}>{r.entry.correct}</td>
+                      <td style={{padding:6}}>{r.entry.correct? Math.round(r.entry.totalTimeMs / r.entry.correct) : '—'}</td>
+                    </tr>
+                  ))
+                })()}
+              </tbody>
+            </table>
           </div>
         </div>
       ) : null}

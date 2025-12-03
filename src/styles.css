@@ -358,11 +358,39 @@ html,body{height:100%;}
 
 /* Stats modal styling */
 .stats-modal{
-  position:fixed;left:80px;top:80px;right:80px;bottom:80px;background:var(--panel);padding:18px;border-radius:10px;overflow:auto;z-index:1200;border:1px solid rgba(255,255,255,0.04)
+  position:fixed;left:80px;top:80px;right:80px;bottom:80px;
+  background-color: #071025; /* fully opaque dark background */
+  color: #e6eef6;
+  padding:20px;border-radius:12px;overflow:auto;z-index:1400;
+  border:1px solid rgba(255,255,255,0.04);box-shadow: 0 30px 80px rgba(2,6,23,0.7);
 }
+.light .stats-modal{ background-color: #ffffff; color: #071025; border-color: rgba(2,6,23,0.06); }
+
+/* Ensure modal visually blocks underlying content */
+.stats-modal::backdrop{ background: none }
 .stats-modal h3{color:var(--accent);margin:0 0 8px 0}
-.stats-modal table{width:100%;border-collapse:collapse;color:var(--muted)}
-.stats-modal th{text-align:left;padding:8px;color:var(--muted);opacity:0.9}
-.stats-modal td{padding:8px}
+.stats-modal .stats-table{width:100%;border-collapse:collapse;color:var(--muted);table-layout:fixed}
+.stats-modal .stats-table thead th{background:rgba(255,255,255,0.02);padding:10px;color:var(--muted);font-weight:700}
+.stats-modal .stats-table tbody td{padding:8px;border-top:1px solid rgba(255,255,255,0.03);vertical-align:middle}
+
+.stats-modal .stats-table thead th.sortable{cursor:pointer;user-select:none}
+.stats-modal .stats-table thead th .sort-indicator{margin-left:6px;font-size:12px;color:var(--muted)}
+
+/* Column width distribution: keep table compact and avoid horizontal scrolling */
+.stats-modal .stats-table thead th:nth-child(1){width:12%}
+.stats-modal .stats-table thead th:nth-child(2){width:40%}
+.stats-modal .stats-table thead th:nth-child(3){width:8%}
+.stats-modal .stats-table thead th:nth-child(4){width:12%}
+.stats-modal .stats-table thead th:nth-child(5){width:8%}
+.stats-modal .stats-table thead th:nth-child(6){width:8%}
+.stats-modal .stats-table thead th:nth-child(7){width:12%}
+
+/* Vertical column separators */
+.stats-modal .stats-table th, .stats-modal .stats-table td{border-right:1px solid rgba(255,255,255,0.03);overflow:hidden}
+.stats-modal .stats-table th:last-child, .stats-modal .stats-table td:last-child{border-right:none}
+
+/* Center headers and values */
+.stats-modal .stats-table thead th, .stats-modal .stats-table tbody td{ text-align:center }
+.stats-modal .stats-table td{white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
 .stats-modal .muted{color:var(--muted)}
 .stats-modal .close-btn{position:absolute;right:24px;top:18px;background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted);padding:6px 8px;border-radius:6px;cursor:pointer}
