@@ -51,3 +51,5 @@ Thumbs.db
 
 # Ignore generated node REPL history
 .node_repl_history
+
+.github

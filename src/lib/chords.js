@@ -152,6 +152,104 @@ export function recognize(pressedNotes) {
   const pressedArr = Array.isArray(pressedNotes) ? pressedNotes : Array.from(pressedNotes)
   const pressedPCs = midiArrayToPCSet(pressedArr)
 
+  // Single-note rule: if all pressed notes collapse to a single pitch-class (octaves),
+  // treat as a single note and return a single, simple result (no chord labeling).
+  if (pressedPCs.size === 1) {
+    const onlyPC = Array.from(pressedPCs)[0]
+    return [{
+      root: onlyPC,
+      rootName: ROOT_NAMES[onlyPC],
+      type: 'single',
+      typeIndex: -1,
+      matchedCount: 1,
+      chordSize: 1,
+      isSubset: true,
+      exactMatch: true,
+      matchedPCs: [onlyPC],
+      missingPCs: [],
+      extraPCs: [],
+      chordPCs: [onlyPC]
+    }]
+  }
+
+  // Two-note special handling (power chords & fourths): use real musical conventions.
+  // Build map from pitch-class -> lowest MIDI value seen for that PC so we can determine
+  // which pitch is lower in actual pitch (not just by PC).
+  if (pressedPCs.size === 2) {
+    const pcs = Array.from(pressedPCs)
+    const pcToMinMidi = new Map()
+    for (const m of pressedArr) {
+      const pc = ((m % 12) + 12) % 12
+      if (!pcToMinMidi.has(pc) || m < pcToMinMidi.get(pc)) pcToMinMidi.set(pc, m)
+    }
+    const pcA = pcs[0], pcB = pcs[1]
+    const minA = pcToMinMidi.get(pcA)
+    const minB = pcToMinMidi.get(pcB)
+    // determine which is lower in pitch
+    const lowerPC = minA <= minB ? pcA : pcB
+    const higherPC = lowerPC === pcA ? pcB : pcA
+    const interval = ((higherPC - lowerPC) + 12) % 12
+
+    // Octave / unison across octaves (interval 0) — already handled above by pressedPCs.size===1,
+    // but keep safe guard
+    if (interval === 0) {
+      const onlyPC = lowerPC
+      return [{
+        root: onlyPC,
+        rootName: ROOT_NAMES[onlyPC],
+        type: 'single',
+        typeIndex: -1,
+        matchedCount: 1,
+        chordSize: 1,
+        isSubset: true,
+        exactMatch: true,
+        matchedPCs: [onlyPC],
+        missingPCs: [],
+        extraPCs: [],
+        chordPCs: [onlyPC]
+      }]
+    }
+
+    // Perfect fifth (7 semitones): root is the lower note
+    if (interval === 7) {
+      const root = lowerPC
+      return [{
+        root,
+        rootName: ROOT_NAMES[root],
+        type: 'fifth',
+        typeIndex: chordPriority.indexOf('fifth'),
+        matchedCount: 2,
+        chordSize: 2,
+        isSubset: true,
+        exactMatch: true,
+        matchedPCs: [lowerPC, higherPC],
+        missingPCs: [],
+        extraPCs: [],
+        chordPCs: [lowerPC, higherPC]
+      }]
+    }
+
+    // Perfect fourth (5 semitones): interpret as an inverted fifth — root is the higher note
+    if (interval === 5) {
+      const root = higherPC
+      return [{
+        root,
+        rootName: ROOT_NAMES[root],
+        type: 'fifth',
+        typeIndex: chordPriority.indexOf('fifth'),
+        matchedCount: 2,
+        chordSize: 2,
+        isSubset: true,
+        exactMatch: true,
+        matchedPCs: [lowerPC, higherPC],
+        missingPCs: [],
+        extraPCs: [],
+        chordPCs: [lowerPC, higherPC]
+      }]
+    }
+    // otherwise fall through to normal template matching (e.g., 2-note dyads that are not perfect 4/5)
+  }
+
   const results = []
   // For performance, we iterate templates and compute intersection sizes.
   for (const t of templates) {
@@ -218,61 +316,62 @@ export function pcsToNotes(pcs) {
   return pcs.map(pc => ROOT_NAMES[pc]).join(' ')
 }
 
-// Map internal type keys to common chord suffixes used in standard notation
+// Map internal type keys to chord suffixes using the user's preferred notation
+// Uses superscript numerals and musical symbols where appropriate (e.g. ⁹ ¹¹ ¹³, ♭, ⁺)
 const typeSuffixMap = {
-  'fifth': '5',
+  'fifth': '⁵',
   'major': '',
   'minor': 'm',
-  'dim': 'dim',
-  'aug': 'aug',
-  'sus2': 'sus2',
-  'sus4': 'sus4',
-  'flat5': 'b5',
-  '6': '6',
-  'm6': 'm6',
-  '7': '7',
-  'm7': 'm7',
-  'dim7': 'dim7',
-  'M7': 'maj7',
-  'mM7': 'm(maj7)',
-  '7sus2': '7sus2',
-  '7sus4': '7sus4',
-  '7b5': '7b5',
-  '7#5': '7#5',
-  'm7b5': 'm7b5',
-  'm7#5': 'm7#5',
-  'add9': 'add9',
-  'madd9': 'madd9',
-  'add11': 'add11',
-  'madd11': 'madd11',
-  'add13': 'add13',
-  'madd13': 'madd13',
-  '7/6': '7/6',
-  '9/6': '9/6',
-  'm9/6': 'm9/6',
-  '9': '9',
-  'm9': 'm9',
-  'b9': 'b9',
-  'mb9': 'mb9',
-  '9#5': '9#5',
-  '9sus4': '9sus4',
-  '9b5': '9b5',
-  'm9b5': 'm9b5',
-  'm9#5': 'm9#5',
-  'M9': 'maj9',
-  '11': '11',
-  'm11': 'm11',
-  'M11': 'maj11',
-  '11b5': '11b5',
-  '11#5': '11#5',
-  '11M7': '11(maj7)',
-  '11b9': '11b9',
-  '11#9': '11#9',
-  '13': '13',
-  'M13': 'maj13',
-  'm13': 'm13',
-  '13b5': '13b5',
-  '13#5': '13#5'
+  'dim': '°',
+  'aug': '⁺',
+  'sus2': 'sus²',
+  'sus4': 'sus⁴',
+  'flat5': '♭⁵',
+  '6': '⁶',
+  'm6': 'm⁶',
+  '7': '⁷',
+  'm7': 'm⁷',
+  'dim7': '°⁷',
+  'M7': 'M⁷',
+  'mM7': 'mM⁷',
+  '7sus2': '⁷sus²',
+  '7sus4': '⁷sus⁴',
+  '7b5': '⁷♭⁵',
+  '7#5': '⁷⁺⁵',
+  'm7b5': 'm⁷♭⁵',
+  'm7#5': 'm⁷⁺⁵',
+  'add9': 'add⁹',
+  'madd9': 'madd⁹',
+  'add11': 'add¹¹',
+  'madd11': 'madd¹¹',
+  'add13': 'add¹³',
+  'madd13': 'madd¹³',
+  '7/6': '⁷/⁶',
+  '9/6': '⁹/⁶',
+  'm9/6': 'm⁹/⁶',
+  '9': '⁹',
+  'm9': 'm⁹',
+  'b9': '♭⁹',
+  'mb9': 'm♭⁹',
+  '9#5': '⁹⁺⁵',
+  '9sus4': '⁹sus⁴',
+  '9b5': '⁹♭⁵',
+  'm9b5': 'm⁹♭⁵',
+  'm9#5': 'm⁹⁺⁵',
+  'M9': 'M⁹',
+  '11': '¹¹',
+  'm11': 'm¹¹',
+  'M11': 'M¹¹',
+  '11b5': '¹¹♭⁵',
+  '11#5': '¹¹⁺⁵',
+  '11M7': '¹¹M⁷',
+  '11b9': '¹¹♭⁹',
+  '11#9': '¹¹⁺⁹',
+  '13': '¹³',
+  'M13': 'M¹³',
+  'm13': 'm¹³',
+  '13b5': '¹³♭⁵',
+  '13#5': '¹³⁺⁵'
 }
 
 // Determine inversion and format a display name for a recognition match.
@@ -281,29 +380,52 @@ export function formatMatch(match, pressedMidiArray = []) {
   // display chord name in standard notation: Root + suffix
   const rootName = match.rootName
   const suffix = typeSuffixMap[match.type] !== undefined ? typeSuffixMap[match.type] : match.type
-  const displayName = `${rootName}${suffix ? suffix : ''}`
+  // For single-note matches, display only the root name.
+  if (match.type === 'single') {
+    return { displayName: rootName, inversion: null, bassName: rootName, longName: 'Single Note' }
+  }
 
-  // determine inversion: look at the lowest pressed MIDI note (if any)
+  // Determine bass note (lowest pressed MIDI) if available
   let inversion = null
   let bassName = null
   if (pressedMidiArray && pressedMidiArray.length > 0) {
     const bassMidi = Math.min(...pressedMidiArray)
     const bassPC = ((bassMidi % 12) + 12) % 12
     bassName = ROOT_NAMES[bassPC]
-    // get ordered chord tones for this type using the original intervals
-    const baseIntervals = chordFormulas[match.type] || []
-    const orderedTones = baseIntervals.map(i => (((match.root + i) % 12) + 12) % 12)
+
+    // Decide whether to use inversion ordinal (triads & sevenths) or slash notation (9ths+)
+    const chordToneIntervals = chordFormulas[match.type] || []
+    const orderedTones = chordToneIntervals.map(i => (((match.root + i) % 12) + 12) % 12)
     const idx = orderedTones.indexOf(bassPC)
-    if (idx === -1) {
-      inversion = 'no chord tone in bass'
-    } else if (idx === 0) {
-      inversion = 'root position'
+
+    // Triads (3-note) and sevenths (4-note) use inversion names when the bass is a chord tone
+    if (match.chordSize <= 4) {
+      if (idx === -1) {
+        inversion = 'no chord tone in bass'
+      } else if (idx === 0) {
+        inversion = 'root position'
+      } else {
+        const ord = idx
+        const suffixOrd = ord === 1 ? '1st' : ord === 2 ? '2nd' : ord === 3 ? '3rd' : `${ord}th`
+        inversion = `${suffixOrd} inversion`
+      }
     } else {
-      // 1st inversion means third in bass -> idx 1 -> '1st inversion'
-      const ord = idx
-      const suffixOrd = ord === 1 ? '1st' : ord === 2 ? '2nd' : ord === 3 ? '3rd' : `${ord}th`
-      inversion = `${suffixOrd} inversion`
+      // For 9ths and above (chordSize > 4), prefer slash-chord notation instead of calling it a high-number inversion
+      // We'll leave inversion null (or a short note) and include the bass as a slash in the display name below.
+      if (idx === -1) inversion = 'slash bass'
+      else inversion = 'slash bass'
     }
+  }
+
+  // Build displayName: use slash notation for large chords (9+) or if bass is non-chord-tone
+  let displayName = `${rootName}${suffix ? suffix : ''}`
+  if (pressedMidiArray && pressedMidiArray.length > 0 && match.chordSize > 4 && bassName) {
+    // 9th and up -> use slash notation
+    displayName = `${displayName}/${bassName}`
+  } else if (pressedMidiArray && pressedMidiArray.length > 0 && bassName && match.chordSize === 2 && match.type === 'fifth') {
+    // For two-note fifths, prefer showing as root+5 (no inversion wording) but include explicit bassName
+    // If bass differs from root, show slash notation (e.g., inverted fourth interpreted as F5 when root is F)
+    if (bassName !== rootName) displayName = `${displayName}/${bassName}`
   }
 
   return { displayName, inversion, bassName, longName: longNameFor(match.type) }
@@ -377,16 +499,16 @@ function longNameFor(type) {
 export function intervalName(semitones) {
   const map = {
     0: '1',
-    1: 'b2',
+    1: '♭2',
     2: '2',
-    3: 'b3',
+    3: '♭3',
     4: '3',
     5: '4',
-    6: 'b5',
+    6: '♭5',
     7: '5',
     8: '#5',
     9: '6',
-    10: 'b7',
+    10: '♭7',
     11: '7'
   }
   return map[((semitones % 12) + 12) % 12] || `${semitones}`

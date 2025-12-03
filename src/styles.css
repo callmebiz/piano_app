@@ -5,6 +5,14 @@
   --black-key-width: 18px;
   --black-key-height: 100px;
 
+  /* Key color mappings (A/B/C) */
+  /* A: primary played color (used by Chord Recognition and for correct-played notes)
+     B: target color (Play The Chord shows targets in this color)
+     C: incorrect key color */
+  --key-color-A: #ffd24a; /* warm yellow */
+  --key-color-B: #6ee7b7; /* mint/teal */
+  --key-color-C: #ff6b6b; /* red */
+
   /* dark theme colors (defaults) */
   --bg-top: #071025;
   --bg-bottom: #081226;
@@ -35,6 +43,19 @@ body{
 
 /* Global page header (outside piano) */
 .app header h1{margin:0;padding:12px 18px;color:var(--accent)}
+
+/* PlayTheChord filter layout helpers */
+.play-filters{display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.play-filters .filter-block{display:flex;flex-direction:column;gap:8px;min-width:180px}
+.play-filters .filter-title{font-weight:700;color:var(--muted);font-size:13px}
+.play-filters .cats-row{display:flex;gap:8px;align-items:center;flex-wrap:nowrap;overflow:auto;padding-bottom:6px}
+.play-cat-btn{padding:6px 10px;border-radius:8px;background:transparent;border:1px solid rgba(255,255,255,0.03);color:var(--muted);cursor:pointer;white-space:nowrap}
+.play-cat-btn.active{background:var(--accent);color:#071025;border-color:transparent}
+.invert-row{display:flex;align-items:center}
+.play-filters .roots{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.play-filters .roots .play-root-btn{padding:6px 8px;border-radius:6px;background:transparent;border:1px solid rgba(255,255,255,0.03);color:var(--muted);cursor:pointer}
+.play-filters .roots .play-root-btn.active{background:var(--accent);color:#071025;border-color:transparent}
+.play-filters .roots-block{min-width:260px}
 
 /* Bottom dock */
 .keyboard-wrapper{
@@ -89,6 +110,54 @@ body{
 .white.active{background: linear-gradient(180deg, #fff3b0, #ffd24a); box-shadow: 0 8px 28px rgba(255,190,60,0.22), 0 3px 8px rgba(2,6,23,0.10) inset; border-color: rgba(255,170,30,0.6); transform: translateY(2px)}
 .black.active{background:linear-gradient(180deg,#ffb74d,#ff9800)}
 
+/* target highlight (distinct from pressed) — use full-key color when not pressed */
+/* When a target is also actively pressed (.active) the pressed styling should win. */
+.white.target:not(.active){
+  background: linear-gradient(180deg, #d9f9ee, var(--key-color-B));
+  box-shadow: 0 6px 18px rgba(110,231,183,0.08) inset, 0 2px 6px rgba(2,6,23,0.06);
+  border-color: rgba(110,231,183,0.18);
+}
+.black.target:not(.active){
+  background: linear-gradient(180deg,#bff3e6,var(--key-color-B));
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25), 0 0 0 3px rgba(110,231,183,0.08);
+}
+
+/* wrong key (red) */
+.white.wrong{background: linear-gradient(180deg,#ffd6d6,#ffb6b6); box-shadow: 0 8px 18px rgba(255,90,90,0.12) inset; border-color: rgba(255,80,80,0.6);} /* color C */
+.black.wrong{background: linear-gradient(180deg,#ff6b6b,#ff4c4c);} /* color C */
+
+/* Mode-specific coloring:
+  - Chord Recognition mode uses color A for active (played) notes.
+  - Play mode uses color B for targets, color A for actual pressed correct notes.
+  - Wrong notes are always color C.
+*/
+/* Chord mode: played = A */
+.keyboard-wrapper[data-mode="chord"] .white.active{background: linear-gradient(180deg, #fff3b0, var(--key-color-A)); box-shadow: 0 8px 28px rgba(255,190,60,0.22), 0 3px 8px rgba(2,6,23,0.10) inset; border-color: rgba(255,170,30,0.6); transform: translateY(2px)}
+.keyboard-wrapper[data-mode="chord"] .black.active{background:linear-gradient(180deg, #ffd27a, #ffb74d)}
+
+/* Play mode: target = B, pressed correct = A */
+.keyboard-wrapper[data-mode="play"] .target.white:not(.active){outline: 3px solid rgba(110,231,183,0.18); box-shadow: 0 6px 18px rgba(110,231,183,0.06);}
+.keyboard-wrapper[data-mode="play"] .target.black:not(.active){box-shadow: 0 0 0 3px rgba(110,231,183,0.12), 0 2px 6px rgba(0,0,0,0.25)}
+.keyboard-wrapper[data-mode="play"] .white.active{background: linear-gradient(180deg, #fff3b0, var(--key-color-A)); box-shadow: 0 8px 28px rgba(255,190,60,0.22), 0 3px 8px rgba(2,6,23,0.10) inset; border-color: rgba(255,170,30,0.6); transform: translateY(2px)}
+.keyboard-wrapper[data-mode="play"] .black.active{background:linear-gradient(180deg, #ffd27a, #ffb74d)}
+
+/* ensure wrong styling (color C) stands out across modes */
+.keyboard-wrapper .white.wrong{background: linear-gradient(180deg,var(--key-color-C), #ffb6b6); box-shadow: 0 8px 18px rgba(255,90,90,0.12) inset; border-color: rgba(255,80,80,0.6);} 
+.keyboard-wrapper .black.wrong{background: linear-gradient(180deg,#ff6b6b,#ff4c4c)}
+
+/* Final override: ensure wrong keys always show the incorrect (C) full-key look
+   regardless of other mode/active rules. Use higher specificity and !important
+   to guarantee visual precedence when a wrong key is both .active and .wrong. */
+.keyboard-wrapper .white.wrong{
+  background: linear-gradient(180deg,var(--key-color-C), #ffb6b6) !important;
+  box-shadow: 0 8px 18px rgba(255,90,90,0.18) inset !important;
+  border-color: rgba(255,80,80,0.9) !important;
+}
+.keyboard-wrapper .black.wrong{
+  background: linear-gradient(180deg,#ff6b6b,#ff4c4c) !important;
+  box-shadow: 0 4px 12px rgba(255,80,80,0.16) !important;
+}
+
 /* smaller shadows */
 .white{box-shadow:0 2px 4px var(--key-shadow) inset}
 .black{box-shadow:0 2px 6px rgba(0,0,0,0.25)}
@@ -97,62 +166,27 @@ body{
 .global-theme-toggle{position:fixed;top:12px;right:12px;z-index:1200}
 .global-theme-toggle button{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:8px;border-radius:8px;color:var(--muted);cursor:pointer}
 
+/* Primary button used across the app */
+.primary-btn{
+  padding:10px 14px;
+  border-radius:10px;
+  background:linear-gradient(180deg,var(--accent),#53c8ac);
+  color:#071025;
+  border:1px solid rgba(0,0,0,0.12);
+  font-weight:700;
+  cursor:pointer;
+  box-shadow:0 6px 18px rgba(13,110,110,0.08);
+}
+.primary-btn[disabled]{
+  opacity:0.5;cursor:not-allowed;box-shadow:none
+}
+
 /* responsive */
 @media (max-width:900px){:root{--white-key-width:28px}}
 @media (max-width:700px){:root{--white-key-width:24px;--white-key-height:120px;--black-key-width:14px;--black-key-height:80px}.piano-header .kbd-handle{width:44px}}
-:root{
-  --sidebar-width: 240px;
-  --piano-height: 220px;
-  /* layout sizes */
-  --white-key-width: 38px;
-  --white-key-height: 160px;
-  --black-key-width: 26px;
-  --black-key-height: 100px;
-
-  /* theme colors */
-  --bg: #0f1724; /* deep slate */
-  --panel: #0b1220;
-  --muted: #9aa4b2;
-  --accent: #6ee7b7; /* mint */
-  --key-shadow: rgba(2,6,23,0.6);
-  --glass: rgba(255,255,255,0.03);
-}
+:root{ --sidebar-width: 240px; --piano-height: 220px }
 
 html,body{height:100%;}
-body{
-  :root{
-    /* layout sizes */
-    --white-key-width: 28px;
-    --white-key-height: 160px;
-    --black-key-width: 18px;
-    --black-key-height: 100px;
-
-    /* theme colors (dark) */
-    --bg-top: #071025;
-    --bg-bottom: #081226;
-    --panel: #0b1220;
-    --muted: #9aa4b2;
-    --accent: #6ee7b7; /* mint */
-    --key-shadow: rgba(2,6,23,0.6);
-    --glass: rgba(255,255,255,0.03);
-  }
-
-  html,body{height:100%;}
-  body{
-    margin:0;
-    font-family: Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
-    background: linear-gradient(180deg,var(--bg-top),var(--bg-bottom) 40%);
-    color:var(--muted);
-    -webkit-font-smoothing:antialiased;
-  }
-.piano-header{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  padding:6px 10px;
-  gap:12px;
-  position:relative;
-}
 .piano-title{font-weight:700;color:var(--accent);font-size:14px}
 
 /* center handle */
@@ -313,7 +347,7 @@ body{
 .grid-row:nth-child(even):not(.grid-head){background:rgba(255,255,255,0.01)}
 .cell-degree{font-weight:700}
 .cell-interval{color:var(--muted)}
-.cell-note{font-family:monospace}
+.cell-note{font-weight:700}
 .cell-present{font-weight:700;color:var(--accent)}
 
 /* place alternatives below the primary match when in vertical layout */
@@ -321,3 +355,14 @@ body{
 .alt-below ul{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px}
 .alt-below .alt{margin:0}
 .muted{color:var(--muted);padding:8px}
+
+/* Stats modal styling */
+.stats-modal{
+  position:fixed;left:80px;top:80px;right:80px;bottom:80px;background:var(--panel);padding:18px;border-radius:10px;overflow:auto;z-index:1200;border:1px solid rgba(255,255,255,0.04)
+}
+.stats-modal h3{color:var(--accent);margin:0 0 8px 0}
+.stats-modal table{width:100%;border-collapse:collapse;color:var(--muted)}
+.stats-modal th{text-align:left;padding:8px;color:var(--muted);opacity:0.9}
+.stats-modal td{padding:8px}
+.stats-modal .muted{color:var(--muted)}
+.stats-modal .close-btn{position:absolute;right:24px;top:18px;background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted);padding:6px 8px;border-radius:6px;cursor:pointer}

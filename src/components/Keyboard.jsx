@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react'
+import React, { useRef, useState, useMemo } from 'react'
 
 const LOWEST = 21
 const HIGHEST = 108
@@ -15,7 +15,7 @@ function midiToLabel(midi) {
   return `${name}${octave}`
 }
 
-export default function Keyboard({ pressedNotes, onNoteOn, onNoteOff, onHeightChange }) {
+export default function Keyboard({ pressedNotes, onNoteOn, onNoteOff, onHeightChange, targetPCs = new Set(), targetMidis = new Set(), mode = 'chord' }) {
   const keys = []
   for (let n = LOWEST; n <= HIGHEST; n++) keys.push(n)
 
@@ -26,6 +26,34 @@ export default function Keyboard({ pressedNotes, onNoteOn, onNoteOff, onHeightCh
   const dragRef = useRef(null)
   const [localPressed, setLocalPressed] = useState(() => new Set())
   const pointerMapRef = useRef(new Map())
+
+  // compute combined pressed set (global MIDI + local pointer presses)
+  const combinedPressed = useMemo(() => {
+    const s = new Set()
+    if (pressedNotes) {
+      const arr = Array.isArray(pressedNotes) ? pressedNotes : Array.from(pressedNotes)
+      for (const n of arr) s.add(n)
+    }
+    for (const n of localPressed) s.add(n)
+    return s
+  }, [pressedNotes, localPressed])
+
+  // compute target MIDI keys (only use explicit `targetMidis` provided by the app).
+  // Do NOT fall back to mapping from `targetPCs` here — apps may want to provide
+  // pitch-classes for detection while hiding visual mids (showNotes=false).
+  const computedTargetMidis = useMemo(() => {
+    if (targetMidis && targetMidis.size > 0) return new Set(Array.from(targetMidis).filter(n => typeof n === 'number' && n >= LOWEST && n <= HIGHEST))
+    return new Set()
+  }, [targetMidis])
+
+  // detection target PCs: prefer explicit `targetPCs` provided by the app (for wrong-note detection).
+  // If none provided, fall back to pitch-classes derived from explicit MIDI targets.
+  const detectionTargetPCs = useMemo(() => {
+    if (targetPCs && targetPCs.size > 0) return targetPCs
+    const s = new Set()
+    for (const m of computedTargetMidis) s.add(((m % 12) + 12) % 12)
+    return s
+  }, [targetPCs, computedTargetMidis])
 
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v))
 
@@ -78,7 +106,7 @@ export default function Keyboard({ pressedNotes, onNoteOn, onNoteOff, onHeightCh
   }, [height, collapsed, onHeightChange])
 
   return (
-    <div ref={wrapperRef} className={`keyboard-wrapper ${collapsed ? 'collapsed' : 'expanded'}`} style={inlineVars}>
+    <div ref={wrapperRef} data-mode={mode} className={`keyboard-wrapper ${collapsed ? 'collapsed' : 'expanded'}`} style={inlineVars}>
       <div className="piano-header">
         <div className="piano-title">Piano</div>
           {!collapsed && <div className="kbd-handle" title="Drag to resize (double-click to reset)" onPointerDown={onPointerDown} onDoubleClick={onHandleDoubleClick} />}
@@ -102,8 +130,11 @@ export default function Keyboard({ pressedNotes, onNoteOn, onNoteOff, onHeightCh
           <div className="keyboard" role="application" aria-label="88-key keyboard">
             {keys.map((n) => {
               const black = isBlackKey(n)
-              const active = pressedNotes.has(n) || localPressed.has(n)
-              const cls = `${black ? 'black' : 'white'} key ${active ? 'active' : ''}`
+              const active = combinedPressed.has(n)
+              const isTarget = computedTargetMidis.has(n)
+              const pc = ((n % 12) + 12) % 12
+              const wrong = combinedPressed.has(n) && (detectionTargetPCs && detectionTargetPCs.size > 0) && !detectionTargetPCs.has(pc)
+              const cls = `${black ? 'black' : 'white'} key ${active ? 'active' : ''} ${isTarget ? 'target' : ''} ${wrong ? 'wrong' : ''}`
 
               const handlePointerDown = (e) => {
                 e.preventDefault()

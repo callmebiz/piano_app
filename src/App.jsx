@@ -3,6 +3,8 @@ import { initMIDI } from './midi'
 import Keyboard from './components/Keyboard'
 import AppsPane from './components/AppsPane'
 import ChordRecognition from './apps/ChordRecognition/ChordRecognition'
+import ErrorBoundary from './components/ErrorBoundary'
+import PlayTheChord from './apps/PlayTheChord/PlayTheChord'
 
 export default function App() {
   const [keyboardHeightPx, setKeyboardHeightPx] = useState(220)
@@ -53,6 +55,32 @@ export default function App() {
   }, [theme])
 
   const [selectedApp, setSelectedApp] = useState('chord')
+  const [keyboardTargetMidis, setKeyboardTargetMidis] = useState(new Set())
+  const [keyboardTargetPCs, setKeyboardTargetPCs] = useState(new Set())
+
+  // Handler used by apps to set keyboard targets. Accepts either a Set (treated as MIDI set)
+  // or an object { mids: Set, pcs: Set } so apps can hide visual mids while still providing pcs
+  const setKeyboardTargets = (val) => {
+    try {
+      if (!val) { setKeyboardTargetMidis(new Set()); setKeyboardTargetPCs(new Set()); return }
+      if (val instanceof Set) {
+        setKeyboardTargetMidis(val)
+        const pcs = new Set(Array.from(val).map(m => ((m % 12) + 12) % 12))
+        setKeyboardTargetPCs(pcs)
+        return
+      }
+      if (typeof val === 'object') {
+        const mids = val.mids instanceof Set ? val.mids : (Array.isArray(val.mids) ? new Set(val.mids) : new Set())
+        const pcs = val.pcs instanceof Set ? val.pcs : (Array.isArray(val.pcs) ? new Set(val.pcs) : new Set(Array.from(mids).map(m => ((m % 12) + 12) % 12)))
+        setKeyboardTargetMidis(mids)
+        setKeyboardTargetPCs(pcs)
+        return
+      }
+      setKeyboardTargetMidis(new Set()); setKeyboardTargetPCs(new Set())
+    } catch (e) {
+      setKeyboardTargetMidis(new Set()); setKeyboardTargetPCs(new Set())
+    }
+  }
 
   return (
     <div className="app" style={{ ['--piano-height']: `${keyboardHeightPx}px`, ['--sidebar-width']: '240px' }}>
@@ -70,10 +98,13 @@ export default function App() {
 
           <main>
             <div className="app-view">
-              {selectedApp === 'chord' && <ChordRecognition pressedNotes={pressed} />}
+              <ErrorBoundary>
+                {selectedApp === 'chord' && <ChordRecognition pressedNotes={pressed} />}
+                {selectedApp === 'play' && <PlayTheChord pressedNotes={pressed} setKeyboardTargetPCs={setKeyboardTargets} />}
+              </ErrorBoundary>
             </div>
 
-            <Keyboard pressedNotes={pressed} onHeightChange={(h) => setKeyboardHeightPx(h)} />
+            <Keyboard pressedNotes={pressed} onHeightChange={(h) => setKeyboardHeightPx(h)} targetMidis={keyboardTargetMidis} targetPCs={keyboardTargetPCs} mode={selectedApp} />
           </main>
 
           <footer>
