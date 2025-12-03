@@ -4,6 +4,7 @@ export default function AppsPane({ active = 'chord', onSelect }) {
   const apps = [
     { id: 'chord', title: 'Chord Recognition', subtitle: 'Identify played chords' },
     { id: 'play', title: 'Play The Chord', subtitle: 'Play highlighted chords on your keyboard' },
+    { id: 'visualizer', title: 'Visualizer', subtitle: 'Live piano bars' },
     // future apps can be added here
   ]
 

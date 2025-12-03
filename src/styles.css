@@ -385,6 +385,18 @@ html,body{height:100%;}
 .stats-modal .stats-table thead th:nth-child(6){width:8%}
 .stats-modal .stats-table thead th:nth-child(7){width:12%}
 
+/* App footer layout adjustments: reserve space above bottom for a fixed footer under the keyboard */
+.keyboard-wrapper{ bottom: 40px !important }
+/* small footer under the keyboard that shows header info for all apps */
+.app-footer{ position:fixed; left:0; right:0; bottom:0; height:40px; background:var(--panel); border-top:1px solid rgba(255,255,255,0.03); display:flex; align-items:center; z-index:1300 }
+.app-footer div{ width:100% }
+
+/* Remove the piano header spacing when in visualizer mode so the keyboard top edge
+  sits flush with the visualizer area above it. Keyboard will receive prop mode="visualizer".
+  Use the data-mode attribute set on the wrapper to detect this. */
+.keyboard-wrapper[data-mode="visualizer"] .piano-header{height:0;padding:0;min-height:0;overflow:hidden}
+.keyboard-wrapper[data-mode="visualizer"]{padding-top:0}
+
 /* Vertical column separators */
 .stats-modal .stats-table th, .stats-modal .stats-table td{border-right:1px solid rgba(255,255,255,0.03);overflow:hidden}
 .stats-modal .stats-table th:last-child, .stats-modal .stats-table td:last-child{border-right:none}
