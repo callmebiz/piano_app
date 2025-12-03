@@ -11,64 +11,69 @@ export default function ChordRecognition({ pressedNotes }) {
   return (
     <section className="chord-app">
       <h2>Chord Recognition</h2>
-      <div className="chord-panels">
-        <div className="main-match">
-          {formatted.length === 0 ? (
-            <div className="muted">No matching chords</div>
-          ) : (
-            (() => {
-              const top = formatted[0]
-              // prepare grid rows: for each chord pitch class, compute interval, note name, and presence
-              const chordTones = (top.chordPCs || []).map(pc => {
-                const interval = (pc - top.root + 12) % 12
-                return {
-                  pc,
-                  note: ROOTS[pc],
-                  interval,
-                  intervalName: intervalName(interval),
-                  present: top.matchedPCs.includes(pc)
-                }
-              })
+      <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:12}}>
+        {formatted.length === 0 ? (
+          <div className="muted">No matching chords</div>
+        ) : (
+          (() => {
+            const top = formatted[0]
+            const chordTones = (top.chordPCs || []).map(pc => {
+              const interval = (pc - top.root + 12) % 12
+              return {
+                pc,
+                note: ROOTS[pc],
+                interval,
+                intervalName: intervalName(interval),
+                present: top.matchedPCs.includes(pc)
+              }
+            })
 
-              return (
-                <div className="primary fixed-primary">
-                  <div className="primary-name">{top.formatted.displayName}</div>
-                  <div className="primary-long">{top.formatted.longName}</div>
-                  <div className="primary-sub">{top.formatted.inversion ? top.formatted.inversion : ''}{top.formatted.bassName ? ` • bass ${top.formatted.bassName}` : ''}</div>
-                  <div className="primary-grid">
-                    <div className="grid-row grid-head">
-                      <div>Degree</div>
-                      <div>Semitones</div>
-                      <div>Note</div>
-                      <div>Present</div>
-                    </div>
-                    {chordTones.map((t, i) => (
-                      <div key={i} className="grid-row">
-                        <div className="cell-degree">{t.intervalName}</div>
-                        <div className="cell-interval">{t.interval}</div>
-                        <div className="cell-note">{t.note}</div>
-                        <div className="cell-present">{t.present ? '✓' : ''}</div>
-                      </div>
-                    ))}
-                  </div>
+            return (
+              <div style={{width:'100%',maxWidth:1100,background:'rgba(255,255,255,0.02)',padding:18,borderRadius:8,display:'flex',flexDirection:'column',alignItems:'center'}}>
+                <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:220}}>
+                  <div style={{fontSize:120,fontWeight:900,color:'var(--accent)',lineHeight:1,textAlign:'center',transform:'translateY(6px)'}}>{top.formatted.displayName}</div>
+                  <div style={{marginTop:8,fontSize:16,color:'var(--muted)',textAlign:'center'}}>{top.formatted.longName}</div>
+                  <div style={{marginTop:6,fontSize:14,color:'var(--muted)'}}>{top.formatted.inversion ? top.formatted.inversion : ''}{top.formatted.bassName ? ` • bass ${top.formatted.bassName}` : ''}</div>
                 </div>
-              )
-            })()
-          )}
-        </div>
 
-        <div className="alt-matches alt-below">
-          <h4>Alternative interpretations</h4>
-          {formatted.length <= 1 && <div className="muted">No alternatives</div>}
-          <ul>
-            {formatted.slice(1,6).map((m, idx) => (
-              <li key={idx} className={`alt ${m.isSubset ? 'subset' : ''}`}>
-                <div className="alt-name">{m.formatted.displayName}</div>
-                <div className="alt-meta">{m.matchedCount}/{m.chordSize}{m.isSubset ? ' subset' : ''}</div>
-              </li>
-            ))}
-          </ul>
-        </div>
+                {/* Transposed table below the chord */}
+                <div style={{display:'flex',justifyContent:'center',marginTop:6}}>
+                  <table className="primary-grid" style={{width:'auto',minWidth:160,borderCollapse:'collapse'}}>
+                    <tbody>
+                      <tr>
+                        <th style={{padding:8,textAlign:'left'}}>Degree</th>
+                        {chordTones.map((t, i) => (
+                          <td key={`d-${i}`} style={{padding:8,textAlign:'center'}}>{t.intervalName}</td>
+                        ))}
+                      </tr>
+                      <tr>
+                        <th style={{padding:8,textAlign:'left'}}>Note</th>
+                        {chordTones.map((t, i) => (
+                          <td key={`n-${i}`} style={{padding:8,textAlign:'center', ...(t.present ? {background:'var(--accent)', color:'#000'} : {})}}>{t.note}</td>
+                        ))}
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Alternatives below */}
+                <div style={{width:'100%',marginTop:12}}>
+                  <h4 style={{margin:'6px 0',color:'var(--muted)'}}>Alternative interpretations</h4>
+                  {formatted.length <= 1 ? <div className="muted">No alternatives</div> : (
+                    <ul style={{listStyle:'none',padding:0,margin:0,display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:8}}>
+                      {formatted.slice(1,6).map((m, idx) => (
+                        <li key={idx} className={`alt ${m.isSubset ? 'subset' : ''}`}>
+                          <div className="alt-name">{m.formatted.displayName}</div>
+                          <div className="alt-meta">{m.matchedCount}/{m.chordSize}{m.isSubset ? ' subset' : ''}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            )
+          })()
+        )}
       </div>
     </section>
   )
