@@ -15,14 +15,19 @@ function midiToLabel(midi) {
   return `${name}${octave}`
 }
 
-export default function Keyboard({ pressedNotes, onNoteOn, onNoteOff, onHeightChange, targetPCs = new Set(), targetMidis = new Set(), mode = 'chord' }) {
+export default function Keyboard({ pressedNotes, onNoteOn, onNoteOff, onHeightChange, targetPCs = new Set(), targetMidis = new Set(), mode = 'chord', labelMode: labelModeProp, onLabelModeChange, collapsed: collapsedProp, onCollapsedChange, disableResize = false }) {
   const keys = []
   for (let n = LOWEST; n <= HIGHEST; n++) keys.push(n)
 
   const DEFAULT_HEIGHT = 160
   const [height, setHeight] = useState(DEFAULT_HEIGHT)
-  const [collapsed, setCollapsed] = useState(false)
-  const [labelMode, setLabelMode] = useState('all')
+  const [internalCollapsed, setInternalCollapsed] = useState(false)
+  const [internalLabelMode, setInternalLabelMode] = useState('all')
+
+  const collapsed = typeof collapsedProp === 'boolean' ? collapsedProp : internalCollapsed
+  const setCollapsed = typeof onCollapsedChange === 'function' ? onCollapsedChange : setInternalCollapsed
+  const labelMode = typeof labelModeProp === 'string' ? labelModeProp : internalLabelMode
+  const setLabelMode = typeof onLabelModeChange === 'function' ? onLabelModeChange : setInternalLabelMode
   const dragRef = useRef(null)
   const [localPressed, setLocalPressed] = useState(() => new Set())
   const pointerMapRef = useRef(new Map())
@@ -108,21 +113,8 @@ export default function Keyboard({ pressedNotes, onNoteOn, onNoteOff, onHeightCh
   return (
     <div ref={wrapperRef} data-mode={mode} className={`keyboard-wrapper ${collapsed ? 'collapsed' : 'expanded'}`} style={inlineVars}>
       <div className="piano-header">
-        <div className="piano-title">Piano</div>
-          {!collapsed && <div className="kbd-handle" title="Drag to resize (double-click to reset)" onPointerDown={onPointerDown} onDoubleClick={onHandleDoubleClick} />}
-        <div className="piano-right">
-          {!collapsed && (
-            <div className="piano-controls">
-              <div className="show-keys-label">Show Keys:</div>
-              <div className={`toggle ${labelMode === 'all' ? 'active' : ''}`} onClick={() => setLabelMode('all')}>All</div>
-              <div className={`toggle ${labelMode === 'c-only' ? 'active' : ''}`} onClick={() => setLabelMode('c-only')}>C Only</div>
-              <div className={`toggle ${labelMode === 'none' ? 'active' : ''}`} onClick={() => setLabelMode('none')}>None</div>
-            </div>
-          )}
-          <div className="piano-actions">
-            <button className="collapse-btn" onClick={() => setCollapsed(!collapsed)}>{collapsed ? 'Show' : 'Hide'}</button>
-          </div>
-        </div>
+        {/* Title and controls moved to site footer; keep optional resize handle */}
+        {!disableResize && !collapsed && <div className="kbd-handle" title="Drag to resize (double-click to reset)" onPointerDown={onPointerDown} onDoubleClick={onHandleDoubleClick} />}
       </div>
 
       {!collapsed && (

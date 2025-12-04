@@ -4,7 +4,7 @@ import { formatMatch } from '../../lib/chords'
 
 function randomInt(max) { return Math.floor(Math.random() * max) }
 
-export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () => {}, externalDebug = false, setExternalDebug = null }) {
+export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () => {} }) {
   const templates = useMemo(() => getTemplates(), [])
 
   const centerCardRef = useRef(null)
@@ -334,58 +334,7 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
     else { setStatsSortKey(key); setStatsSortDir('desc') }
   }
 
-  // Debug helpers: allow forcing a template and forcing a stat write for testing
-  const [debugMode, setDebugMode] = useState(false)
-  const [debugIndex, setDebugIndex] = useState(0)
-
-  // keep debugIndex valid when allowedTemplates changes
-  useEffect(() => {
-    const pool = allowedTemplates && allowedTemplates.length > 0 ? allowedTemplates : templates
-    if (!pool || pool.length === 0) {
-      setDebugIndex(0)
-      return
-    }
-    if (debugIndex >= pool.length) setDebugIndex(0)
-  }, [allowedTemplates, templates])
-
-  const forceSetCurrentFromIndex = () => {
-    try {
-      const pool = allowedTemplates || []
-      const t = pool[debugIndex]
-      if (t) {
-        setCurrent(t)
-        setStatus('idle')
-        setHoldProgress(0)
-        setPendingNext(null)
-      }
-    } catch (e) {}
-  }
-
-  const forceRecordNow = (tmpl = null, correct = true, timeMs = 0) => {
-    try {
-      const pool = allowedTemplates || []
-      const target = tmpl || pool[debugIndex] || current
-      if (!target) return
-      // write directly to stats (bypass trackStats) for debugging
-      const s = JSON.parse(JSON.stringify(stats || { byType: {}, byRoot: {} }))
-      const t = target.type
-      if (!s.byType[t]) s.byType[t] = { attempts: 0, correct: 0, totalTimeMs: 0 }
-      s.byType[t].attempts += 1
-      if (correct) { s.byType[t].correct += 1; s.byType[t].totalTimeMs += (timeMs || 0) }
-      const r = String(target.root)
-      if (!s.byRoot[r]) s.byRoot[r] = { attempts: 0, correct: 0, totalTimeMs: 0 }
-      s.byRoot[r].attempts += 1
-      if (correct) { s.byRoot[r].correct += 1; s.byRoot[r].totalTimeMs += (timeMs || 0) }
-      saveStats(s)
-    } catch (e) {}
-  }
-
-  // sync external debug state when provided by parent App
-  useEffect(() => {
-    try {
-      if (typeof externalDebug === 'boolean') setDebugMode(externalDebug)
-    } catch (e) {}
-  }, [externalDebug])
+  
 
   // Start per-chord timing for free-play when tracking is enabled and we're not in a timed round
   useEffect(() => {
@@ -977,26 +926,7 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
             </div>
             <div style={{display:'flex',gap:8,alignItems:'center'}}>
               <button className="primary-btn" onClick={() => setShowStats(true)}>View Stats</button>
-              <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:6}}>
-                {debugMode ? (
-                  <>
-                    { (allowedTemplates && allowedTemplates.length > 0) ? (
-                      <>
-                        <select value={debugIndex} onChange={e => setDebugIndex(Number(e.target.value))} style={{padding:6,borderRadius:6}}>
-                          {allowedTemplates.map((t,i) => {
-                            const fm = formatMatch({ root: t.root, rootName: ROOTS[t.root], type: t.type, chordSize: t.size }, [])
-                            return (<option key={`dbg-${i}`} value={i}>{`${fm.displayName} (${ROOTS[t.root]} ${t.type})`}</option>)
-                          })}
-                        </select>
-                        <button className="primary-btn" onClick={forceSetCurrentFromIndex}>Force Set</button>
-                        <button className="primary-btn" onClick={() => forceRecordNow(null, true, 0)}>Force Record</button>
-                      </>
-                    ) : (
-                      <div style={{color:'var(--muted)',fontSize:13}}>No allowed templates (adjust filters)</div>
-                    )}
-                  </>
-                ) : null}
-              </div>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:6}} />
               <button
                 className="primary-btn"
                 onClick={() => {

@@ -1,8 +1,8 @@
 :root{
   /* sizes */
-  --white-key-width: 34px;
+  --white-key-width: 40px;
   --white-key-height: 160px;
-  --black-key-width: 18px;
+  --black-key-width: 25px;
   --black-key-height: 100px;
 
   /* Key color mappings (A/B/C) */
@@ -17,9 +17,11 @@
   --bg-top: #071025;
   --bg-bottom: #081226;
   --panel: rgba(11,18,32,0.6);
+  --panel-solid: rgba(11,18,32,1);
   --muted: #9aa4b2;
   --accent: #6ee7b7;
   --key-shadow: rgba(2,6,23,0.25);
+  --site-footer-height: 48px;
 }
 
 /* light theme overrides (applied by adding .light to <html>) */
@@ -27,6 +29,7 @@
   --bg-top: #f7fafc;
   --bg-bottom: #eef5f8;
   --panel: rgba(255,255,255,0.9);
+  --panel-solid: rgba(255,255,255,1);
   --muted: #5b6b78;
   --accent: #0ea5a3;
   --key-shadow: rgba(2,6,23,0.06);
@@ -59,7 +62,7 @@ body{
 
 /* Bottom dock */
 .keyboard-wrapper{
-  position:fixed;left:0;right:0;bottom:0;
+  position:fixed;left:var(--sidebar-width);right:0;bottom:var(--site-footer-height);
   padding:8px 18px 20px;
   background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
   border-top:1px solid rgba(255,255,255,0.03);
@@ -291,8 +294,8 @@ html,body{height:100%;}
 
 /* Apps pane on the left */
 .apps-pane{
-  position:fixed;left:0;top:0;bottom:var(--piano-height); /* stops above the piano */
-  width:var(--sidebar-width);display:flex;flex-direction:column;gap:12px;padding:16px 12px;background:var(--panel);color:var(--muted);z-index:950;border-right:1px solid rgba(255,255,255,0.04);box-shadow: 2px 0 8px rgba(2,6,23,0.12);
+  position:fixed;left:0;top:0;bottom:var(--site-footer-height); /* extend down to the top of the site footer */
+  width:var(--sidebar-width);box-sizing:border-box;display:flex;flex-direction:column;gap:12px;padding:16px 12px;background:var(--panel);color:var(--muted);z-index:950;border-right:1px solid rgba(255,255,255,0.04);box-shadow: 2px 0 8px rgba(2,6,23,0.12);
 }
 .apps-header{font-weight:700;color:var(--accent);font-size:15px;padding:4px 8px}
 .apps-list{display:flex;flex-direction:column;gap:8px}
@@ -314,6 +317,7 @@ html,body{height:100%;}
 @media (max-width:600px){
   .apps-pane{display:none}
   .content{margin-left:0;max-width:100%}
+  .keyboard-wrapper{left:0}
 }
 
 /* center inner content area and constrain width for better design */
@@ -321,6 +325,13 @@ html,body{height:100%;}
 
 /* ensure content doesn't get covered by piano: use piano height variable */
 .content{padding-bottom:var(--piano-height)}
+
+/* Site footer fixed below the keyboard */
+.site-footer{position:fixed;left:0;right:0;bottom:0;height:var(--site-footer-height);background:var(--panel);border-top:1px solid rgba(255,255,255,0.03);display:flex;align-items:center;z-index:1100}
+.site-footer .inner{max-width:1100px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;width:100%;padding:8px;position:relative}
+.site-footer .title{position:absolute;left:0%;transform:translateX(-25%);font-weight:700;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center}
+.site-footer .center{color:var(--muted);position:absolute;left:50%;transform:translateX(-50%);text-align:center}
+.site-footer .right{position:absolute;left:100%;transform:translateX(-75%);display:flex;align-items:center;gap:8px;white-space:nowrap}
 
 /* Chord Recognition app styles */
 .chord-app{background:var(--panel);padding:12px;border-radius:10px;margin-bottom:12px;border:1px solid rgba(255,255,255,0.03)}

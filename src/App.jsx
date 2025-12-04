@@ -5,6 +5,7 @@ import AppsPane from './components/AppsPane'
 import ChordRecognition from './apps/ChordRecognition/ChordRecognition'
 import ErrorBoundary from './components/ErrorBoundary'
 import PlayTheChord from './apps/PlayTheChord/PlayTheChord'
+import Settings from './components/Settings'
 
 export default function App() {
   const [keyboardHeightPx, setKeyboardHeightPx] = useState(220)
@@ -57,8 +58,9 @@ export default function App() {
   const [selectedApp, setSelectedApp] = useState('chord')
   const [keyboardTargetMidis, setKeyboardTargetMidis] = useState(new Set())
   const [keyboardTargetPCs, setKeyboardTargetPCs] = useState(new Set())
-  const [debugChord, setDebugChord] = useState(false)
-  const [debugPlay, setDebugPlay] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
+  const [labelMode, setLabelMode] = useState('all')
+  const [keyboardCollapsed, setKeyboardCollapsed] = useState(false)
 
   // Handler used by apps to set keyboard targets. Accepts either a Set (treated as MIDI set)
   // or an object { mids: Set, pcs: Set } so apps can hide visual mids while still providing pcs
@@ -89,36 +91,53 @@ export default function App() {
       <AppsPane active={selectedApp} onSelect={(id) => setSelectedApp(id)} />
       <div className="global-theme-toggle">
         <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label="Toggle theme">{theme === 'dark' ? '🌙' : '☀️'}</button>
-        {selectedApp === 'chord' ? (
-          <button onClick={() => setDebugChord(d => !d)} aria-pressed={debugChord} title="Toggle Debug for ChordRecognition" style={{marginLeft:8}}>{debugChord ? '⚙️' : '⚙️'}</button>
-        ) : null}
-        {selectedApp === 'play' ? (
-          <button onClick={() => setDebugPlay(d => !d)} aria-pressed={debugPlay} title="Toggle Debug for PlayTheChord" style={{marginLeft:8}}>{debugPlay ? '⚙️' : '⚙️'}</button>
-        ) : null}
+        <button onClick={() => setShowSettings(true)} title="Settings" style={{marginLeft:8}}>⚙️</button>
       </div>
       <div className="content">
         <div className="content-inner">
-          <header>
-            <h1>Piano App — MIDI Demo</h1>
-            <p><strong>MIDI status:</strong> {midiStatus}</p>
-            <div style={{marginTop:6}} />
-          </header>
+          {/* top header removed; site title and MIDI status moved to site footer */}
 
           <main>
             <div className="app-view">
               <ErrorBoundary>
-                {selectedApp === 'chord' && <ChordRecognition pressedNotes={pressed} debug={debugChord} />}
-                {selectedApp === 'play' && <PlayTheChord pressedNotes={pressed} setKeyboardTargetPCs={setKeyboardTargets} externalDebug={debugPlay} setExternalDebug={setDebugPlay} />}
+                {selectedApp === 'chord' && <ChordRecognition pressedNotes={pressed} />}
+                {selectedApp === 'play' && <PlayTheChord pressedNotes={pressed} setKeyboardTargetPCs={setKeyboardTargets} />}
               </ErrorBoundary>
             </div>
 
-            <Keyboard pressedNotes={pressed} onHeightChange={(h) => setKeyboardHeightPx(h)} targetMidis={keyboardTargetMidis} targetPCs={keyboardTargetPCs} mode={selectedApp} />
+            <Keyboard
+              pressedNotes={pressed}
+              onHeightChange={(h) => setKeyboardHeightPx(h)}
+              targetMidis={keyboardTargetMidis}
+              targetPCs={keyboardTargetPCs}
+              mode={selectedApp}
+              labelMode={labelMode}
+              onLabelModeChange={(m) => setLabelMode(m)}
+              collapsed={keyboardCollapsed}
+              onCollapsedChange={(c) => setKeyboardCollapsed(c)}
+            />
           </main>
 
           <footer>
             <p>Connect your MIDI keyboard, then play notes — keys should light up.</p>
           </footer>
         </div>
+      </div>
+
+      {/* Site footer placed below the keyboard */}
+      <div className="site-footer" role="contentinfo">
+        <div className="inner">
+          <div className="title">Piano App</div>
+          <div className="center">MIDI status: {midiStatus}</div>
+          <div className="right">
+            <div className="show-keys-label">Show Keys:</div>
+            <div className={`toggle ${labelMode === 'all' ? 'active' : ''}`} onClick={() => setLabelMode('all')}>All</div>
+            <div className={`toggle ${labelMode === 'c-only' ? 'active' : ''}`} onClick={() => setLabelMode('c-only')}>C Only</div>
+            <div className={`toggle ${labelMode === 'none' ? 'active' : ''}`} onClick={() => setLabelMode('none')}>None</div>
+            <button className="collapse-btn" onClick={() => setKeyboardCollapsed(k => !k)}>{keyboardCollapsed ? 'Show' : 'Hide'}</button>
+          </div>
+        </div>
+          <Settings open={showSettings} onClose={() => setShowSettings(false)} />
       </div>
     </div>
   )
