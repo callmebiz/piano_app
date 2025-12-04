@@ -297,6 +297,25 @@ html,body{height:100%;}
   position:fixed;left:0;top:0;bottom:var(--site-footer-height); /* extend down to the top of the site footer */
   width:var(--sidebar-width);box-sizing:border-box;display:flex;flex-direction:column;gap:12px;padding:16px 12px;background:var(--panel);color:var(--muted);z-index:950;border-right:1px solid rgba(255,255,255,0.04);box-shadow: 2px 0 8px rgba(2,6,23,0.12);
 }
+
+/* transition for sliding when collapsed */
+.apps-pane{transition:transform .18s ease, width .18s ease}
+
+/* visible tab that toggles the apps pane */
+.apps-tab{
+  position:fixed;top:50%;transform:translateY(-50%);z-index:1200;width:36px;height:56px;border-radius:0 8px 8px 0;display:flex;align-items:center;justify-content:center;cursor:pointer;border:1px solid rgba(255,255,255,0.06);background:var(--panel-solid);color:var(--muted);font-weight:700;box-shadow:0 4px 10px rgba(0,0,0,0.12)
+}
+
+/* position the tab near the apps pane right edge when open */
+.apps-tab{left:calc(var(--sidebar-width) - 18px)}
+
+/* collapsed state: slide the pane fully off-screen so only the tab remains visible */
+.apps-closed .apps-pane{transform:translateX(calc(-1 * var(--sidebar-width)))}
+.apps-closed .apps-tab{left:4px}
+
+/* When the apps pane is collapsed, shrink main content and keyboard to the tab width */
+.apps-closed .content{margin-left:0;max-width:100%}
+.apps-closed .keyboard-wrapper{left:0;right:0}
 .apps-header{font-weight:700;color:var(--accent);font-size:15px;padding:4px 8px}
 .apps-list{display:flex;flex-direction:column;gap:8px}
 .app-item{display:flex;flex-direction:column;align-items:flex-start;padding:10px;border-radius:8px;background:transparent;border:1px solid transparent;color:inherit;cursor:pointer;text-align:left}
