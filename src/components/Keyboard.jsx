@@ -15,12 +15,11 @@ function midiToLabel(midi) {
   return `${name}${octave}`
 }
 
-export default function Keyboard({ pressedNotes, onNoteOn, onNoteOff, onHeightChange, targetPCs = new Set(), targetMidis = new Set(), mode = 'chord', labelMode: labelModeProp, onLabelModeChange, collapsed: collapsedProp, onCollapsedChange, disableResize = false }) {
+export default function Keyboard({ pressedNotes, onNoteOn, onNoteOff, onHeightChange, targetPCs = new Set(), targetMidis = new Set(), mode = 'chord', labelMode: labelModeProp, onLabelModeChange, collapsed: collapsedProp, onCollapsedChange }) {
   const keys = []
   for (let n = LOWEST; n <= HIGHEST; n++) keys.push(n)
 
-  const DEFAULT_HEIGHT = 160
-  const [height, setHeight] = useState(DEFAULT_HEIGHT)
+  // key heights are controlled by CSS variables; no manual resize state
   const [internalCollapsed, setInternalCollapsed] = useState(false)
   const [internalLabelMode, setInternalLabelMode] = useState('all')
 
@@ -28,7 +27,6 @@ export default function Keyboard({ pressedNotes, onNoteOn, onNoteOff, onHeightCh
   const setCollapsed = typeof onCollapsedChange === 'function' ? onCollapsedChange : setInternalCollapsed
   const labelMode = typeof labelModeProp === 'string' ? labelModeProp : internalLabelMode
   const setLabelMode = typeof onLabelModeChange === 'function' ? onLabelModeChange : setInternalLabelMode
-  const dragRef = useRef(null)
   const [localPressed, setLocalPressed] = useState(() => new Set())
   const pointerMapRef = useRef(new Map())
 
@@ -60,32 +58,7 @@ export default function Keyboard({ pressedNotes, onNoteOn, onNoteOff, onHeightCh
     return s
   }, [targetPCs, computedTargetMidis])
 
-  const clamp = (v, a, b) => Math.max(a, Math.min(b, v))
-
-  const onPointerDown = (e) => {
-    e.preventDefault()
-    e.currentTarget.setPointerCapture(e.pointerId)
-    dragRef.current = { startY: e.clientY, startHeight: height }
-    window.addEventListener('pointermove', onPointerMove)
-    window.addEventListener('pointerup', onPointerUp)
-  }
-
-  const onHandleDoubleClick = () => {
-    setHeight(DEFAULT_HEIGHT)
-  }
-
-  const onPointerMove = (e) => {
-    if (!dragRef.current) return
-    const dy = dragRef.current.startY - e.clientY
-    const newH = clamp(dragRef.current.startHeight + dy, 80, 420)
-    setHeight(newH)
-  }
-
-  const onPointerUp = () => {
-    dragRef.current = null
-    window.removeEventListener('pointermove', onPointerMove)
-    window.removeEventListener('pointerup', onPointerUp)
-  }
+  
 
   const showLabelFor = (n) => {
     if (labelMode === 'none') return ''
@@ -98,23 +71,20 @@ export default function Keyboard({ pressedNotes, onNoteOn, onNoteOff, onHeightCh
 
   const wrapperRef = useRef(null)
 
-  const inlineVars = {
-    '--white-key-height': `${height}px`,
-    '--black-key-height': `${Math.round(height * 0.62)}px`
-  }
+  // no inline CSS vars required; CSS controls key heights
+  const inlineVars = undefined
 
   // notify parent about the total keyboard wrapper height so other UI (apps pane)
   // can avoid overlapping the piano. Called whenever height or collapsed changes.
   React.useEffect(() => {
     const h = wrapperRef.current ? wrapperRef.current.offsetHeight : 0
     try { if (typeof onHeightChange === 'function') onHeightChange(h) } catch (e) {}
-  }, [height, collapsed, onHeightChange])
+  }, [collapsed, onHeightChange])
 
   return (
-    <div ref={wrapperRef} data-mode={mode} className={`keyboard-wrapper ${collapsed ? 'collapsed' : 'expanded'}`} style={inlineVars}>
+    <div ref={wrapperRef} data-mode={mode} className={`keyboard-wrapper ${collapsed ? 'collapsed' : 'expanded'}`}>
       <div className="piano-header">
-        {/* Title and controls moved to site footer; keep optional resize handle */}
-        {!disableResize && !collapsed && <div className="kbd-handle" title="Drag to resize (double-click to reset)" onPointerDown={onPointerDown} onDoubleClick={onHandleDoubleClick} />}
+        {/* Title and controls moved to site footer; resize control removed */}
       </div>
 
       {!collapsed && (

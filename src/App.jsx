@@ -87,7 +87,7 @@ export default function App() {
   }, [setKeyboardTargetMidis, setKeyboardTargetPCs])
 
   return (
-    <div className="app" style={{ ['--piano-height']: `${keyboardHeightPx}px`, ['--sidebar-width']: '240px' }}>
+    <div className="app" style={{ ['--piano-height']: keyboardCollapsed ? '0px' : `${keyboardHeightPx}px`, ['--sidebar-width']: '240px' }}>
       <AppsPane active={selectedApp} onSelect={(id) => setSelectedApp(id)} />
       <div className="global-theme-toggle">
         <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label="Toggle theme">{theme === 'dark' ? '🌙' : '☀️'}</button>
@@ -105,17 +105,19 @@ export default function App() {
               </ErrorBoundary>
             </div>
 
-            <Keyboard
-              pressedNotes={pressed}
-              onHeightChange={(h) => setKeyboardHeightPx(h)}
-              targetMidis={keyboardTargetMidis}
-              targetPCs={keyboardTargetPCs}
-              mode={selectedApp}
-              labelMode={labelMode}
-              onLabelModeChange={(m) => setLabelMode(m)}
-              collapsed={keyboardCollapsed}
-              onCollapsedChange={(c) => setKeyboardCollapsed(c)}
-            />
+            {!keyboardCollapsed && (
+              <Keyboard
+                pressedNotes={pressed}
+                onHeightChange={(h) => setKeyboardHeightPx(h)}
+                targetMidis={keyboardTargetMidis}
+                targetPCs={keyboardTargetPCs}
+                mode={selectedApp}
+                labelMode={labelMode}
+                onLabelModeChange={(m) => setLabelMode(m)}
+                collapsed={keyboardCollapsed}
+                onCollapsedChange={(c) => setKeyboardCollapsed(c)}
+              />
+            )}
           </main>
 
           <footer>

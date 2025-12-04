@@ -63,7 +63,8 @@ body{
 /* Bottom dock */
 .keyboard-wrapper{
   position:fixed;left:var(--sidebar-width);right:0;bottom:var(--site-footer-height);
-  padding:8px 18px 20px;
+  /* remove top padding so the keyboard keys can sit flush with the pane top */
+  padding:0 18px 20px;
   background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
   border-top:1px solid rgba(255,255,255,0.03);
   backdrop-filter: blur(6px);
@@ -72,12 +73,10 @@ body{
 .keyboard-wrapper.collapsed{height:48px;padding:6px 18px}
 
 /* header */
-.piano-header{display:flex;align-items:center;justify-content:space-between;padding:6px 10px;position:relative}
+.piano-header{display:flex;align-items:center;justify-content:space-between;padding:6px 10px;position:absolute;top:0;left:18px;right:18px}
 .piano-title{font-weight:700;color:var(--accent);font-size:14px}
 
-/* centered handle */
-.kbd-handle{height:8px;width:56px;border-radius:6px;background:linear-gradient(180deg,#e6eef6,#bcd7c9);cursor:ns-resize}
-.piano-header .kbd-handle{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)}
+/* resize handle removed */
 
 /* right controls */
 .piano-right{display:flex;gap:12px;align-items:center;margin-left:auto}
@@ -93,7 +92,7 @@ body{
 .collapse-btn{padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:var(--muted);cursor:pointer}
 
 /* keyboard area */
-.keyboard{display:flex;align-items:flex-start;justify-content:center;height:var(--white-key-height);position:relative;overflow:auto;padding:12px 6px 18px;gap:0}
+.keyboard{display:flex;align-items:flex-start;justify-content:center;height:var(--white-key-height);position:relative;overflow:auto;padding:0 6px 18px;gap:0;margin-top:-11px}
 .key{box-sizing:border-box;display:flex;align-items:flex-end;justify-content:center;position:relative;user-select:none;transition:background .12s ease, box-shadow .12s ease, transform .08s ease}
 
 /* white keys: flat top, rounded bottom */
@@ -186,18 +185,13 @@ body{
 
 /* responsive */
 @media (max-width:900px){:root{--white-key-width:28px}}
-@media (max-width:700px){:root{--white-key-width:24px;--white-key-height:120px;--black-key-width:14px;--black-key-height:80px}.piano-header .kbd-handle{width:44px}}
+@media (max-width:700px){:root{--white-key-width:24px;--white-key-height:120px;--black-key-width:14px;--black-key-height:80px}}
 :root{ --sidebar-width: 240px; --piano-height: 220px }
 
 html,body{height:100%;}
 .piano-title{font-weight:700;color:var(--accent);font-size:14px}
 
-/* center handle */
-.kbd-handle{
-  height:8px;width:56px;border-radius:6px;background:linear-gradient(180deg,#e6eef6,#bcd7c9);
-  cursor:ns-resize; box-shadow: 0 2px 6px rgba(0,0,0,0.45);
-}
-.piano-header .kbd-handle{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)}
+/* resize handle removed */
 
 /* right controls */
 .piano-right{display:flex;gap:12px;align-items:center;margin-left:auto}
@@ -289,7 +283,6 @@ html,body{height:100%;}
 }
 @media (max-width:700px){
   :root{--white-key-width:20px;--white-key-height:120px;--black-key-width:12px;--black-key-height:80px}
-  .piano-header .kbd-handle{width:44px}
 }
 
 /* Apps pane on the left */
