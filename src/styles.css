@@ -109,7 +109,7 @@ body{
 .white .label{color:#1f2937}
 .light .white .label{color:#071025}
 
-.white.active{background: linear-gradient(180deg, #fff3b0, #ffd24a); box-shadow: 0 8px 28px rgba(255,190,60,0.22), 0 3px 8px rgba(2,6,23,0.10) inset; border-color: rgba(255,170,30,0.6); transform: translateY(2px)}
+.white.active{background: linear-gradient(180deg, #fff3b0, #ffd24a); box-shadow: 0 3px 8px rgba(2,6,23,0.10) inset; border-color: rgba(255,170,30,0.6)}
 .black.active{background:linear-gradient(180deg,#ffb74d,#ff9800)}
 
 /* target highlight (distinct from pressed) — use full-key color when not pressed */
@@ -134,13 +134,13 @@ body{
   - Wrong notes are always color C.
 */
 /* Chord mode: played = A */
-.keyboard-wrapper[data-mode="chord"] .white.active{background: linear-gradient(180deg, #fff3b0, var(--key-color-A)); box-shadow: 0 8px 28px rgba(255,190,60,0.22), 0 3px 8px rgba(2,6,23,0.10) inset; border-color: rgba(255,170,30,0.6); transform: translateY(2px)}
+.keyboard-wrapper[data-mode="chord"] .white.active{background: linear-gradient(180deg, #fff3b0, var(--key-color-A)); box-shadow: 0 3px 8px rgba(2,6,23,0.10) inset; border-color: rgba(255,170,30,0.6)}
 .keyboard-wrapper[data-mode="chord"] .black.active{background:linear-gradient(180deg, #ffd27a, #ffb74d)}
 
 /* Play mode: target = B, pressed correct = A */
 .keyboard-wrapper[data-mode="play"] .target.white:not(.active){outline: 3px solid rgba(110,231,183,0.18); box-shadow: 0 6px 18px rgba(110,231,183,0.06);}
 .keyboard-wrapper[data-mode="play"] .target.black:not(.active){box-shadow: 0 0 0 3px rgba(110,231,183,0.12), 0 2px 6px rgba(0,0,0,0.25)}
-.keyboard-wrapper[data-mode="play"] .white.active{background: linear-gradient(180deg, #fff3b0, var(--key-color-A)); box-shadow: 0 8px 28px rgba(255,190,60,0.22), 0 3px 8px rgba(2,6,23,0.10) inset; border-color: rgba(255,170,30,0.6); transform: translateY(2px)}
+.keyboard-wrapper[data-mode="play"] .white.active{background: linear-gradient(180deg, #fff3b0, var(--key-color-A)); box-shadow: 0 3px 8px rgba(2,6,23,0.10) inset; border-color: rgba(255,170,30,0.6)}
 .keyboard-wrapper[data-mode="play"] .black.active{background:linear-gradient(180deg, #ffd27a, #ffb74d)}
 
 /* ensure wrong styling (color C) stands out across modes */
@@ -248,7 +248,7 @@ html,body{height:100%;}
 }
 
 .label{font-size:11px;padding:6px 4px;color:var(--muted);position:absolute;bottom:8px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.0);border-radius:6px;z-index:2}
-.white.active{background: linear-gradient(180deg, #fff3b0, #ffd24a); box-shadow: 0 8px 28px rgba(255,190,60,0.22), 0 3px 8px rgba(2,6,23,0.10) inset; border-color: rgba(255,170,30,0.6); transform: translateY(2px)}
+.white.active{background: linear-gradient(180deg, #fff3b0, #ffd24a); box-shadow: 0 3px 8px rgba(2,6,23,0.10) inset; border-color: rgba(255,170,30,0.6)}
 .black.active{background:linear-gradient(180deg,#ffb74d,#ff9800);box-shadow:0 2px 8px rgba(255,152,0,0.06)}
 
 /* collapsed state style */
@@ -398,6 +398,18 @@ html,body{height:100%;}
 
 .stats-modal .stats-table thead th.sortable{cursor:pointer;user-select:none}
 .stats-modal .stats-table thead th .sort-indicator{margin-left:6px;font-size:12px;color:var(--muted)}
+
+/* Visualizer overlay that sits above the content and ends at the keyboard top */
+.visualizer-container{
+  position:fixed;left:0;right:0;top:0;height:0;pointer-events:none;z-index:900;overflow:visible;
+}
+.visualizer-container .viz-bar{
+  will-change:transform,height,left,width,opacity;
+  /* transform/height are updated every frame by JS; avoid CSS transitions for them. */
+  transition: border-radius .12s ease, opacity .18s linear;
+  /* Remove box-shadow so bars don't cast shadows on each other */
+  box-shadow: none;
+}
 
 /* Column width distribution: keep table compact and avoid horizontal scrolling */
 .stats-modal .stats-table thead th:nth-child(1){width:12%}

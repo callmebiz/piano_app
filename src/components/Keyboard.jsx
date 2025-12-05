@@ -29,6 +29,7 @@ export default function Keyboard({ pressedNotes, onNoteOn, onNoteOff, onHeightCh
   const setLabelMode = typeof onLabelModeChange === 'function' ? onLabelModeChange : setInternalLabelMode
   const [localPressed, setLocalPressed] = useState(() => new Set())
   const pointerMapRef = useRef(new Map())
+  const lastMoveRef = useRef(0)
 
   // compute combined pressed set (global MIDI + local pointer presses)
   const combinedPressed = useMemo(() => {
@@ -110,6 +111,54 @@ export default function Keyboard({ pressedNotes, onNoteOn, onNoteOff, onHeightCh
                 if (typeof onNoteOn === 'function') onNoteOn(n)
               }
 
+              const handlePointerMove = (e) => {
+                // Only handle pointer moves for pointers that started on a key (we captured them).
+                // This prevents hover-only motion from triggering notes.
+                const pid = e.pointerId
+                if (!pointerMapRef.current.has(pid)) return
+                // throttle pointermove to ~30fps to reduce CPU pressure
+                const now = performance.now()
+                if (now - lastMoveRef.current < 33) return
+                lastMoveRef.current = now
+                const prev = pointerMapRef.current.get(pid)
+                let el
+                try { el = document.elementFromPoint(e.clientX, e.clientY) } catch (err) { el = null }
+                const keyEl = el && el.closest ? el.closest('.keyboard .key') : null
+                if (keyEl && keyEl.dataset && keyEl.dataset.midi) {
+                  const midi = Number(keyEl.dataset.midi)
+                  if (midi !== prev) {
+                    // switch active note for this pointer
+                    if (prev != null) {
+                      pointerMapRef.current.delete(pid)
+                      setLocalPressed(prevSet => {
+                        const s = new Set(prevSet)
+                        s.delete(prev)
+                        return s
+                      })
+                      if (typeof onNoteOff === 'function') onNoteOff(prev)
+                    }
+                    pointerMapRef.current.set(pid, midi)
+                    setLocalPressed(prevSet => {
+                      const s = new Set(prevSet)
+                      s.add(midi)
+                      return s
+                    })
+                    if (typeof onNoteOn === 'function') onNoteOn(midi)
+                  }
+                } else {
+                  // not over any key; if we had a previous note for this pointer, release it
+                  if (prev != null) {
+                    pointerMapRef.current.delete(pid)
+                    setLocalPressed(prevSet => {
+                      const s = new Set(prevSet)
+                      s.delete(prev)
+                      return s
+                    })
+                    if (typeof onNoteOff === 'function') onNoteOff(prev)
+                  }
+                }
+              }
+
               const handlePointerUp = (e) => {
                 const note = pointerMapRef.current.get(e.pointerId)
                 if (note != null) {
@@ -165,11 +214,13 @@ export default function Keyboard({ pressedNotes, onNoteOn, onNoteOff, onHeightCh
               return (
                 <div
                   key={n}
+                  data-midi={n}
                   className={cls}
                   title={`${midiToLabel(n)} (${n})`}
                   role="button"
                   tabIndex={0}
                   onPointerDown={handlePointerDown}
+                  onPointerMove={handlePointerMove}
                   onPointerUp={handlePointerUp}
                   onPointerCancel={handlePointerCancel}
                   onKeyDown={handleKeyDown}
@@ -179,6 +230,13 @@ export default function Keyboard({ pressedNotes, onNoteOn, onNoteOff, onHeightCh
                 </div>
               )
             })}
+          </div>
+          {/* Controls positioned between piano bottom edge and site footer */}
+          <div className="keyboard-controls" style={{display:'flex',justifyContent:'center',alignItems:'center',gap:10,width:'100%',boxSizing:'border-box'}}>
+            <div className="show-keys-label" style={{fontSize:13,fontWeight:600,marginRight:8}}>Key Labels:</div>
+            <div className={`toggle ${labelMode === 'all' ? 'active' : ''}`} onClick={() => setLabelMode('all')}>All</div>
+            <div className={`toggle ${labelMode === 'c-only' ? 'active' : ''}`} onClick={() => setLabelMode('c-only')}>C Only</div>
+            <div className={`toggle ${labelMode === 'none' ? 'active' : ''}`} onClick={() => setLabelMode('none')}>None</div>
           </div>
         </>
       )}

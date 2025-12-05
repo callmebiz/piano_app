@@ -5,6 +5,7 @@ import AppsPane from './components/AppsPane'
 import ChordRecognition from './apps/ChordRecognition/ChordRecognition'
 import ErrorBoundary from './components/ErrorBoundary'
 import PlayTheChord from './apps/PlayTheChord/PlayTheChord'
+import Visualizer from './apps/Visualizer/Visualizer'
 import Settings from './components/Settings'
 
 export default function App() {
@@ -61,6 +62,13 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false)
   const [labelMode, setLabelMode] = useState('all')
   const [keyboardCollapsed, setKeyboardCollapsed] = useState(false)
+  const [shrinkOn, setShrinkOn] = useState(false)
+  const [freezeOn, setFreezeOn] = useState(false)
+
+  // ensure keyboard is always visible while Visualizer is active
+  useEffect(() => {
+    if (selectedApp === 'visualizer') setKeyboardCollapsed(false)
+  }, [selectedApp])
 
   // Handler used by apps to set keyboard targets. Accepts either a Set (treated as MIDI set)
   // or an object { mids: Set, pcs: Set } so apps can hide visual mids while still providing pcs
@@ -102,12 +110,23 @@ export default function App() {
               <ErrorBoundary>
                 {selectedApp === 'chord' && <ChordRecognition pressedNotes={pressed} />}
                 {selectedApp === 'play' && <PlayTheChord pressedNotes={pressed} setKeyboardTargetPCs={setKeyboardTargets} />}
+                {selectedApp === 'visualizer' && <Visualizer pressedNotes={pressed} shrinkOn={shrinkOn} freezeOn={freezeOn} />}
               </ErrorBoundary>
             </div>
 
             {!keyboardCollapsed && (
               <Keyboard
                 pressedNotes={pressed}
+                  onNoteOn={(n) => setPressed(prev => {
+                    const s = new Set(prev)
+                    s.add(n)
+                    return s
+                  })}
+                  onNoteOff={(n) => setPressed(prev => {
+                    const s = new Set(prev)
+                    s.delete(n)
+                    return s
+                  })}
                 onHeightChange={(h) => setKeyboardHeightPx(h)}
                 targetMidis={keyboardTargetMidis}
                 targetPCs={keyboardTargetPCs}
@@ -120,9 +139,7 @@ export default function App() {
             )}
           </main>
 
-          <footer>
-            <p>Connect your MIDI keyboard, then play notes — keys should light up.</p>
-          </footer>
+          <footer />
         </div>
       </div>
 
@@ -131,15 +148,20 @@ export default function App() {
         <div className="inner">
           <div className="title">Piano App</div>
           <div className="center">MIDI status: {midiStatus}</div>
-          <div className="right">
-            <div className="show-keys-label">Show Keys:</div>
-            <div className={`toggle ${labelMode === 'all' ? 'active' : ''}`} onClick={() => setLabelMode('all')}>All</div>
-            <div className={`toggle ${labelMode === 'c-only' ? 'active' : ''}`} onClick={() => setLabelMode('c-only')}>C Only</div>
-            <div className={`toggle ${labelMode === 'none' ? 'active' : ''}`} onClick={() => setLabelMode('none')}>None</div>
-            <button className="collapse-btn" onClick={() => setKeyboardCollapsed(k => !k)}>{keyboardCollapsed ? 'Show' : 'Hide'}</button>
+            <div className="right">
+            {selectedApp !== 'visualizer' && (
+              <button className="collapse-btn" onClick={() => setKeyboardCollapsed(k => !k)}>{keyboardCollapsed ? 'Show' : 'Hide'}</button>
+            )}
+            {selectedApp === 'visualizer' && (
+              <>
+                <div style={{marginRight:10,fontSize:13,fontWeight:600,opacity:0.9}}>Visualizer Options</div>
+                <div className={`toggle ${shrinkOn ? 'active' : ''}`} onClick={() => setShrinkOn(s => !s)} title="Toggle shrink">{`Shrink: ${shrinkOn ? 'ON' : 'OFF'}`}</div>
+                <div className={`toggle ${freezeOn ? 'active' : ''}`} onClick={() => setFreezeOn(f => !f)} title="Toggle freeze">{`Freeze: ${freezeOn ? 'ON' : 'OFF'}`}</div>
+              </>
+            )}
           </div>
         </div>
-          <Settings open={showSettings} onClose={() => setShowSettings(false)} />
+          <Settings open={showSettings} onClose={() => setShowSettings(false)} app={selectedApp} shrinkOn={shrinkOn} />
       </div>
     </div>
   )
