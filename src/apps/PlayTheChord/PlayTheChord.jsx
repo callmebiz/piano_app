@@ -346,6 +346,27 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
     } catch (e) {}
   }, [current, trackStats, roundActive])
 
+  // When trackStats is turned OFF, clear any pending timers/state so
+  // the last suggested chord (which may never have been played) is not
+  // accidentally recorded later. This prevents blank/zero-time entries.
+  useEffect(() => {
+    if (!trackStats) {
+      // cancel any hold timer
+      try {
+        if (holdTimerRef.current) { clearInterval(holdTimerRef.current); holdTimerRef.current = null }
+      } catch (e) {}
+      holdStartRef.current = null
+      setHoldProgress(0)
+      // clear pending next suggestion so it doesn't auto-advance
+      setPendingNext(null)
+      // clear round timing state
+      setRoundStartTs(null)
+      setRoundActive(false)
+      setStatus('idle')
+      setRoundCanceled(false)
+    }
+  }, [trackStats])
+
   // no stats view toggle: consolidated stats modal
   const countdownRef = useRef(null)
   const holdTimerRef = useRef(null)
