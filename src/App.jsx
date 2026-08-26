@@ -6,7 +6,10 @@ import ChordRecognition from './apps/ChordRecognition/ChordRecognition'
 import ErrorBoundary from './components/ErrorBoundary'
 import PlayTheChord from './apps/PlayTheChord/PlayTheChord'
 import Visualizer from './apps/Visualizer/Visualizer'
+import Scales from './apps/Scales/Scales'
+import KeyCenter from './apps/KeyCenter/KeyCenter'
 import Settings from './components/Settings'
+import { noteOn, noteOff } from './audio/engine'
 
 export default function App() {
   const [keyboardHeightPx, setKeyboardHeightPx] = useState(220)
@@ -23,13 +26,14 @@ export default function App() {
   useEffect(() => {
     let mounted = true
     initMIDI(
-      (note) => {
+      (note, velocity) => {
         if (!mounted) return
         setPressed((prev) => {
           const s = new Set(prev)
           s.add(note)
           return s
         })
+        noteOn(note, velocity)
       },
       (note) => {
         if (!mounted) return
@@ -38,6 +42,7 @@ export default function App() {
           s.delete(note)
           return s
         })
+        noteOff(note)
       },
       (status) => {
         if (!mounted) return
@@ -110,6 +115,8 @@ export default function App() {
               <ErrorBoundary>
                 {selectedApp === 'chord' && <ChordRecognition pressedNotes={pressed} />}
                 {selectedApp === 'play' && <PlayTheChord pressedNotes={pressed} setKeyboardTargetPCs={setKeyboardTargets} />}
+                {selectedApp === 'scales' && <Scales pressedNotes={pressed} setKeyboardTargetPCs={setKeyboardTargets} />}
+                {selectedApp === 'keycenter' && <KeyCenter pressedNotes={pressed} setKeyboardTargetPCs={setKeyboardTargets} />}
                 {selectedApp === 'visualizer' && <Visualizer pressedNotes={pressed} shrinkOn={shrinkOn} freezeOn={freezeOn} />}
               </ErrorBoundary>
             </div>
@@ -117,16 +124,22 @@ export default function App() {
             {!keyboardCollapsed && (
               <Keyboard
                 pressedNotes={pressed}
-                  onNoteOn={(n) => setPressed(prev => {
-                    const s = new Set(prev)
-                    s.add(n)
-                    return s
-                  })}
-                  onNoteOff={(n) => setPressed(prev => {
-                    const s = new Set(prev)
-                    s.delete(n)
-                    return s
-                  })}
+                  onNoteOn={(n) => {
+                    setPressed(prev => {
+                      const s = new Set(prev)
+                      s.add(n)
+                      return s
+                    })
+                    noteOn(n, 0.85)
+                  }}
+                  onNoteOff={(n) => {
+                    setPressed(prev => {
+                      const s = new Set(prev)
+                      s.delete(n)
+                      return s
+                    })
+                    noteOff(n)
+                  }}
                 onHeightChange={(h) => setKeyboardHeightPx(h)}
                 targetMidis={keyboardTargetMidis}
                 targetPCs={keyboardTargetPCs}

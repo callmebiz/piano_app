@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react'
 import { getTemplates, ROOTS, pcsToNotes, chordFormulas } from '../../lib/chords'
 import { formatMatch } from '../../lib/chords'
+import useHoldToSkip from '../../hooks/useHoldToSkip'
 
 function randomInt(max) { return Math.floor(Math.random() * max) }
 
@@ -741,6 +742,10 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
   const stop = () => {
     // cancel current active round; do not record stats for it
     if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; setCountdown(null) }
+    // cancel any in-progress hold so it can't complete after Stop
+    if (holdTimerRef.current) { clearInterval(holdTimerRef.current); holdTimerRef.current = null }
+    holdStartRef.current = null
+    setHoldProgress(0)
     if (roundActive) {
       setRoundActive(false)
       setRoundCanceled(true)
@@ -757,6 +762,10 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
     if (!allowedTemplates || allowedTemplates.length === 0) return
     const next = pickDifferent(allowedTemplates, current)
     if (next) {
+      // cancel any in-progress hold so a stray completion can't fire after Skip
+      if (holdTimerRef.current) { clearInterval(holdTimerRef.current); holdTimerRef.current = null }
+      holdStartRef.current = null
+      setHoldProgress(0)
       setCurrent(next)
       setRoundActive(false)
       setRoundCanceled(false)
@@ -766,6 +775,9 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
       setRoundStartTs(null)
     }
   }
+
+  // Double-tap-and-hold any note to skip (mirrors the Skip button/'S' shortcut)
+  const skipHoldProgress = useHoldToSkip(pressedNotes, skip)
 
   // Keyboard shortcut: press 'S' to skip (ignore when typing in inputs)
   useEffect(() => {
@@ -950,22 +962,13 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
               <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:6}} />
               <button
                 className="primary-btn"
-                onClick={() => {
-                  if (!allowedTemplates || allowedTemplates.length === 0) return
-                  const next = pickDifferent(allowedTemplates, current)
-                  if (next) {
-                    setCurrent(next)
-                    setRoundActive(false)
-                    setRoundCanceled(false)
-                    setHadWrongPress(false)
-                    setPendingNext(null)
-                    setStatus('idle')
-                    setRoundStartTs(null)
-                  }
-                }}
+                onClick={skip}
                 disabled={!allowedTemplates || allowedTemplates.length === 0}
+                style={{ position: 'relative', overflow: 'hidden' }}
+                title="Double-tap and hold any note to skip"
               >
-                Skip (S)
+                <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${skipHoldProgress * 100}%`, background: 'rgba(0,0,0,0.28)', transition: skipHoldProgress === 0 ? 'width 150ms ease-out' : 'none', pointerEvents: 'none' }} />
+                <span style={{ position: 'relative' }}>Skip (S)</span>
               </button>
               <div style={{marginLeft:12}}>{countdown != null ? <span style={{fontSize:18,fontWeight:800}}>Starting in {countdown}…</span> : null}</div>
               <div style={{marginLeft:12,fontSize:13,color:'var(--muted)'}}>

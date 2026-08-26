@@ -1,4 +1,12 @@
 import React, { useEffect, useState } from 'react'
+import { getSynthParams, setSynthParams, SYNTH_DEFAULTS } from '../audio/engine'
+
+const WAVEFORM_OPTIONS = [
+  { value: 'sine', label: 'Sine (soft)' },
+  { value: 'triangle', label: 'Triangle (warm)' },
+  { value: 'sawtooth', label: 'Sawtooth (bright/buzzy)' },
+  { value: 'square', label: 'Square (hollow)' }
+]
 
 export default function Settings({ open = false, onClose = () => {}, app = '', shrinkOn = false }) {
   const DEFAULT_WHITE = 40
@@ -30,6 +38,10 @@ export default function Settings({ open = false, onClose = () => {}, app = '', s
   const [visualColorsLocked, setVisualColorsLocked] = useState(() => {
     try { return localStorage.getItem('visualizer:colorsLocked') === '1' } catch(e) { return true }
   })
+
+  const [synth, setSynth] = useState(() => getSynthParams())
+  const updateSynth = (partial) => setSynth(setSynthParams(partial))
+  const resetSynth = () => setSynth(setSynthParams(SYNTH_DEFAULTS))
 
   useEffect(() => {
     // apply initial values to CSS variables on mount
@@ -160,6 +172,58 @@ export default function Settings({ open = false, onClose = () => {}, app = '', s
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
             <input type="range" min={8} max={40} value={blackWidth} onChange={e => onBlackChange(e.target.value)} onDoubleClick={() => onBlackChange(DEFAULT_BLACK)} style={{flex:1, minWidth:0}} />
             <input type="number" value={blackWidth} onChange={e => onBlackChange(e.target.value)} style={{width:48,flex:'0 0 48px',padding:'6px 8px',borderRadius:6,border:'1px solid rgba(255,255,255,0.06)',background:'transparent',color:'var(--muted)'}} />
+          </div>
+
+          <div style={{gridColumn:'1 / -1', marginTop:10, paddingTop:10, borderTop:'1px solid rgba(255,255,255,0.06)', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+            <div style={{fontWeight:700, color:'var(--accent)'}}>Sound</div>
+            <div style={{display:'flex', gap:8, alignItems:'center'}}>
+              <label style={{fontSize:12,display:'flex',alignItems:'center',gap:6}}>
+                <input type="checkbox" checked={!!synth.muted} onChange={e => updateSynth({ muted: e.target.checked })} />
+                Mute
+              </label>
+              <button onClick={resetSynth} title="Reset sound to defaults" style={{padding:'6px 10px',borderRadius:6,border:'1px solid rgba(255,255,255,0.06)',background:'transparent',color:'var(--muted)'}}>Reset sound</button>
+            </div>
+          </div>
+
+          <div style={{fontWeight:600}}>Master volume</div>
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            <input type="range" min={0} max={100} value={Math.round(synth.masterVolume * 100)} onChange={e => updateSynth({ masterVolume: Number(e.target.value) / 100 })} style={{flex:1, minWidth:0}} />
+            <div style={{width:40,textAlign:'right',fontSize:12}}>{Math.round(synth.masterVolume * 100)}%</div>
+          </div>
+
+          <div style={{fontWeight:600}}>Waveform</div>
+          <select value={synth.waveform} onChange={e => updateSynth({ waveform: e.target.value })} style={{background:'transparent',border:'1px solid rgba(255,255,255,0.06)',color:'var(--muted)',padding:'6px 8px',borderRadius:6}}>
+            {WAVEFORM_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+
+          <div style={{fontWeight:600}}>Attack (ms)</div>
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            <input type="range" min={0} max={200} value={synth.attackMs} onChange={e => updateSynth({ attackMs: Number(e.target.value) })} style={{flex:1, minWidth:0}} />
+            <div style={{width:40,textAlign:'right',fontSize:12}}>{synth.attackMs}</div>
+          </div>
+
+          <div style={{fontWeight:600}}>Decay (ms)</div>
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            <input type="range" min={20} max={2000} value={synth.decayMs} onChange={e => updateSynth({ decayMs: Number(e.target.value) })} style={{flex:1, minWidth:0}} />
+            <div style={{width:40,textAlign:'right',fontSize:12}}>{synth.decayMs}</div>
+          </div>
+
+          <div style={{fontWeight:600}}>Sustain</div>
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            <input type="range" min={0} max={100} value={Math.round(synth.sustain * 100)} onChange={e => updateSynth({ sustain: Number(e.target.value) / 100 })} style={{flex:1, minWidth:0}} />
+            <div style={{width:40,textAlign:'right',fontSize:12}}>{Math.round(synth.sustain * 100)}%</div>
+          </div>
+
+          <div style={{fontWeight:600}}>Release (ms)</div>
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            <input type="range" min={20} max={2000} value={synth.releaseMs} onChange={e => updateSynth({ releaseMs: Number(e.target.value) })} style={{flex:1, minWidth:0}} />
+            <div style={{width:40,textAlign:'right',fontSize:12}}>{synth.releaseMs}</div>
+          </div>
+
+          <div style={{fontWeight:600}}>Brightness</div>
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            <input type="range" min={0} max={100} value={synth.brightness} onChange={e => updateSynth({ brightness: Number(e.target.value) })} style={{flex:1, minWidth:0}} />
+            <div style={{width:40,textAlign:'right',fontSize:12}}>{synth.brightness}</div>
           </div>
 
           {app === 'visualizer' && (

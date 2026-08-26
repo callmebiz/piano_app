@@ -9,7 +9,7 @@ export async function initMIDI(onNoteOn, onNoteOff, onStateChange) {
     const [status, note, velocity] = e.data
     const command = status & 0xf0
     if (command === 0x90 && velocity !== 0) {
-      onNoteOn && onNoteOn(note)
+      onNoteOn && onNoteOn(note, velocity / 127)
     } else if (command === 0x80 || (command === 0x90 && velocity === 0)) {
       onNoteOff && onNoteOff(note)
     }
