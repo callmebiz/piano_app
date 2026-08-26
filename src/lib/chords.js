@@ -151,6 +151,11 @@ export function recognize(pressedNotes) {
   if (!pressedNotes || pressedNotes.size === 0 || pressedNotes.length === 0) return []
   const pressedArr = Array.isArray(pressedNotes) ? pressedNotes : Array.from(pressedNotes)
   const pressedPCs = midiArrayToPCSet(pressedArr)
+  // Lowest note actually played — used to prefer the root-position reading
+  // when multiple chord types share the exact same pitch-class set (e.g.
+  // Cm7 and D#6 are both {C,D#,G,A#}; whichever one has the bass note as
+  // its root is the one being played in root position, and wins the tie).
+  const bassPC = ((Math.min(...pressedArr) % 12) + 12) % 12
 
   // Single-note rule: if all pressed notes collapse to a single pitch-class (octaves),
   // treat as a single note and return a single, simple result (no chord labeling).
@@ -297,13 +302,25 @@ export function recognize(pressedNotes) {
     if ((b.exactMatch?1:0) !== (a.exactMatch?1:0)) return (b.exactMatch?1:0) - (a.exactMatch?1:0)
     // 2) more matched pitch-classes next
     if (b.matchedCount !== a.matchedCount) return b.matchedCount - a.matchedCount
-    // 3) prefer higher-priority chord types (lower index)
+    // 3) prefer candidates with no unplayed notes (chordSize === what was actually
+    // pressed) over supersets that require notes you didn't play (e.g. Cm7 — exactly
+    // what's pressed — over Cm9, which is a superset missing its unplayed 9th)
+    const aTight = a.chordSize === pressedSize ? 1 : 0
+    const bTight = b.chordSize === pressedSize ? 1 : 0
+    if (aTight !== bTight) return bTight - aTight
+    // 4) among equally-tight candidates, prefer whichever is in root position
+    // (root === bass note actually played) — this is what separates e.g. Cm7
+    // from D#6, which are the exact same four pitch classes
+    const aRootPos = a.root === bassPC ? 1 : 0
+    const bRootPos = b.root === bassPC ? 1 : 0
+    if (aRootPos !== bRootPos) return bRootPos - aRootPos
+    // 5) prefer higher-priority chord types (lower index)
     const ai = a.typeIndex === -1 ? 999 : a.typeIndex
     const bi = b.typeIndex === -1 ? 999 : b.typeIndex
     if (ai !== bi) return ai - bi
-    // 4) smaller chord size (fewer tones) as a tie-breaker
+    // 6) smaller chord size (fewer tones) as a tie-breaker
     if (a.chordSize !== b.chordSize) return a.chordSize - b.chordSize
-    // 5) finally deterministic by root
+    // 7) finally deterministic by root
     if (a.root !== b.root) return a.root - b.root
     return 0
   })

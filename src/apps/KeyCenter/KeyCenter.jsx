@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { getDiatonicChords, getSecondaryDominants, voiceChordNearMiddleC, ROOTS } from '../../lib/harmony'
-import { chordFormulas, formatMatch, intervalName } from '../../lib/chords'
+import { chordFormulas, formatMatch, intervalName, recognize } from '../../lib/chords'
 import { playChord } from '../../audio/engine'
 
 export default function KeyCenter({ pressedNotes, setKeyboardTargetPCs = () => {} }) {
@@ -27,6 +27,18 @@ export default function KeyCenter({ pressedNotes, setKeyboardTargetPCs = () => {
 
   const [activeChip, setActiveChip] = useState(null)
   useEffect(() => { setActiveChip(null) }, [keyRoot, sevenths])
+
+  // What the player is actually playing right now, reusing the same
+  // recognizer Chord Recognition uses — lets them study the chart while
+  // getting live feedback on what their hands are actually doing. Always on.
+  const pressedArr = useMemo(() => Array.isArray(pressedNotes) ? pressedNotes : Array.from(pressedNotes || []), [pressedNotes])
+  const playedMatches = useMemo(() => {
+    if (pressedArr.length === 0) return []
+    const matches = recognize(pressedArr)
+    return matches.map((m) => ({ ...m, formatted: formatMatch(m, pressedArr) }))
+  }, [pressedArr])
+  const playedMatch = playedMatches[0] || null
+  const playedAlternatives = playedMatches.slice(1, 6)
 
   const diatonic = useMemo(() => getDiatonicChords(keyRoot, { sevenths }), [keyRoot, sevenths])
   const secondaryDominants = useMemo(() => getSecondaryDominants(keyRoot), [keyRoot])
@@ -113,6 +125,26 @@ export default function KeyCenter({ pressedNotes, setKeyboardTargetPCs = () => {
           <div style={{ width: '100%', maxWidth: 1100, background: 'rgba(255,255,255,0.02)', padding: 18, borderRadius: 8 }}>
             <div style={{ textAlign: 'center', fontSize: 32, fontWeight: 900, color: 'var(--accent)', marginBottom: 16 }}>
               {ROOTS[keyRoot]} Major
+            </div>
+
+            <div style={{ textAlign: 'center', marginBottom: 16 }}>
+              <div style={{ minHeight: 28, fontSize: 15, color: 'var(--muted)' }}>
+                {playedMatch ? (
+                  <span>You're playing: <strong style={{ color: 'var(--accent)' }}>{playedMatch.formatted.displayName}</strong> <span style={{ opacity: 0.75 }}>({playedMatch.formatted.longName})</span></span>
+                ) : (
+                  <span style={{ opacity: 0.6 }}>Play something on the keyboard…</span>
+                )}
+              </div>
+              {playedAlternatives.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginTop: 8 }}>
+                  {playedAlternatives.map((m, idx) => (
+                    <span key={idx} className={`alt ${m.isSubset ? 'subset' : ''}`} style={{ fontSize: 12, padding: '4px 8px' }}>
+                      <span className="alt-name">{m.formatted.displayName}</span>
+                      <span className="alt-meta" style={{ marginLeft: 6 }}>{m.matchedCount}/{m.chordSize}{m.isSubset ? ' subset' : ''}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div style={gridStyle}>
