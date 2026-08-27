@@ -26,6 +26,17 @@ export function vexKeyFor(letter, accidental, octave) {
   return `${letter.toLowerCase()}${accidental}/${octave}`
 }
 
+// Canonical root spelling for scale/chord identification & construction —
+// prefers flats for the five non-natural pitch classes (the near-universal
+// convention for naming major scales/chords built on black keys), unlike
+// lib/chords.js's ROOTS (sharp-only). Using sharp-only ROOTS here was a real
+// bug: it silently turned "Bb7" into "A#7", which then needed a double
+// accidental to spell correctly and got dropped from the exercise pool
+// entirely. lib/chords.js's ROOTS stays sharp-only on purpose — chord
+// *recognition* already picks sharp vs flat per case via the bass-note
+// tiebreak in recognize(), which doesn't apply here.
+export const CANONICAL_ROOTS = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B']
+
 const VEX_LETTERS_SHARP = ['c', 'c#', 'd', 'd#', 'e', 'f', 'f#', 'g', 'g#', 'a', 'a#', 'b']
 
 // Simple sharp-spelled midi -> vexKey, for reusing the existing pitch-class-

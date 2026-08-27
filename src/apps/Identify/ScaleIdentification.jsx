@@ -3,18 +3,17 @@ import Staff from '../../components/Staff'
 import AnswerGrid from './AnswerGrid'
 import useIdentifyExercise from './useIdentifyExercise'
 import { useStaffSettings } from '../../lib/staffSettings'
-import { midiToVexKey } from '../../lib/staffNotes'
-import { buildScaleSequence, SCALE_TYPES, scaleLongNames } from '../../lib/scales'
+import { buildScaleSpelling, SCALE_TYPES, scaleLongNames } from '../../lib/scales'
 
-const ROOT_PCS = [0, 2, 4, 5, 7, 9, 11] // naturals — keeps the pool scoped for this first pass
-
+// All 12 roots now that spelling is correctly handled (buildScaleSpelling
+// skips any root/type combo that would need a double accidental).
 const pool = (() => {
   const items = []
-  for (const root of ROOT_PCS) {
+  for (let root = 0; root < 12; root++) {
     for (const type of SCALE_TYPES) {
-      const { midis } = buildScaleSequence(root, type, { descending: false, octaves: 1, anchor: 60 })
-      if (!midis || midis.length === 0) continue
-      items.push({ name: type, root, midis, vexKeys: midis.map(midiToVexKey) })
+      const notes = buildScaleSpelling(root, type, { octave: 4 })
+      if (!notes) continue
+      items.push({ name: type, root, vexKeys: notes.map((n) => n.vexKey) })
     }
   }
   return items

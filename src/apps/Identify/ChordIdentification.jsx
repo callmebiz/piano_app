@@ -3,8 +3,7 @@ import Staff from '../../components/Staff'
 import AnswerGrid from './AnswerGrid'
 import useIdentifyExercise from './useIdentifyExercise'
 import { useStaffSettings } from '../../lib/staffSettings'
-import { midiToVexKey } from '../../lib/staffNotes'
-import { voiceChordNearMiddleC } from '../../lib/harmony'
+import { buildChordSpelling } from '../../lib/chords'
 
 const CHORD_TYPES = ['major', 'minor', 'aug', 'dim', '7', 'M7', 'm7', 'm7b5', 'dim7']
 const CHORD_LABELS = {
@@ -23,9 +22,9 @@ const pool = (() => {
   const items = []
   for (let root = 0; root < 12; root++) {
     for (const type of CHORD_TYPES) {
-      const midis = voiceChordNearMiddleC(root, type)
-      if (!midis || midis.length === 0) continue
-      items.push({ name: type, root, midis, vexKeys: midis.map(midiToVexKey) })
+      const notes = buildChordSpelling(root, type, { octave: 4 })
+      if (!notes) continue // would need a double sharp/flat at this root — skip
+      items.push({ name: type, root, vexKeys: notes.map((n) => n.vexKey) })
     }
   }
   return items

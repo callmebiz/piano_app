@@ -4,6 +4,7 @@
 // sequence (ascending, optionally + descending) anchored near middle C.
 
 import { ROOTS } from './chords'
+import { parseSpelling, spellingMidi, vexKeyFor, CANONICAL_ROOTS } from './staffNotes'
 
 // Interval formulas relative to root (semitones, ascending order — index 0 is always 0/root).
 export const scaleFormulas = {
@@ -148,6 +149,56 @@ export function scaleDisplayName(root, type) {
   const rootName = ROOTS[((root % 12) + 12) % 12]
   const longName = scaleLongNames[type] || type
   return `${rootName} ${longName}`
+}
+
+// Which letter-name step (0-6, from the root's own letter) each scale degree
+// uses, for correct notation spelling — one letter per degree, no repeats or
+// skips for the 7-note scales; pentatonic/blues intentionally skip letters
+// (matching which degrees of the parent major/minor scale they keep), and
+// blues' added chromatic "blue note" reuses the same letter as the degree
+// before it (spelled as a sharp on that letter — the conventional #4).
+const SCALE_LETTER_STEPS = {
+  major: [0, 1, 2, 3, 4, 5, 6],
+  natMinor: [0, 1, 2, 3, 4, 5, 6],
+  harMinor: [0, 1, 2, 3, 4, 5, 6],
+  melMinor: [0, 1, 2, 3, 4, 5, 6],
+  majPent: [0, 1, 2, 4, 5],
+  minPent: [0, 2, 3, 4, 6],
+  blues: [0, 2, 3, 3, 4, 6]
+}
+const LETTER_ORDER = ['C', 'D', 'E', 'F', 'G', 'A', 'B']
+
+// Correctly-spelled (proper accidentals, no letter reused where avoidable)
+// note sequence for a scale — unlike buildScaleSequence above, which is
+// pitch-class-only and fine for Scales practice (highlighting keyboard keys)
+// but would show e.g. F major's Bb as A# on a staff. Root is a pitch class
+// (0-11); returns one note per scaleFormulas[type] degree, ascending from
+// the given octave. Returns null if any degree would need a double sharp/flat.
+export function buildScaleSpelling(root, type, opts = {}) {
+  const octave = opts.octave != null ? opts.octave : 4
+  const intervals = scaleFormulas[type]
+  const steps = SCALE_LETTER_STEPS[type]
+  if (!intervals || !steps) return null
+
+  const rootName = CANONICAL_ROOTS[((root % 12) + 12) % 12]
+  const { letter: rootLetter, accidental: rootAccidental } = parseSpelling(rootName)
+  const rootLetterIdx = LETTER_ORDER.indexOf(rootLetter)
+  const rootMidi = spellingMidi(rootLetter, rootAccidental, octave)
+
+  const notes = []
+  for (let i = 0; i < intervals.length; i++) {
+    const step = steps[i]
+    const letterIdx = (rootLetterIdx + step) % 7
+    const letter = LETTER_ORDER[letterIdx]
+    const noteOctave = octave + Math.floor((rootLetterIdx + step) / 7)
+    const naturalMidi = spellingMidi(letter, '', noteOctave)
+    const targetMidi = rootMidi + intervals[i]
+    const shift = targetMidi - naturalMidi
+    if (shift < -1 || shift > 1) return null
+    const accidental = shift === 1 ? '#' : shift === -1 ? 'b' : ''
+    notes.push({ name: `${letter}${accidental}`, midi: targetMidi, vexKey: vexKeyFor(letter, accidental, noteOctave) })
+  }
+  return notes
 }
 
 export { ROOTS }

@@ -8,6 +8,9 @@
 
 // NOTE: This file contains thorough comments for traceability.
 
+import { parseSpelling, CANONICAL_ROOTS } from './staffNotes'
+import { noteFromInterval } from './intervals'
+
 const ROOT_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']
 
 // Define chord formulas relative to root. These are pitch classes (0 = root)
@@ -537,3 +540,37 @@ export function regenTemplates() { generateTemplates(); return templates }
 
 // Export root names for convenience
 export const ROOTS = ROOT_NAMES
+
+// Quality+number (per lib/intervals.js) for each chord tone, root-relative —
+// used to produce correctly-spelled chord tones (e.g. F major = F-A-C, not
+// F-A-Db) instead of falling back to sharp-only naming. Core types only for
+// now (matches Chord Identification's set); extend as more get exercise
+// support. Semitone totals here match the corresponding chordFormulas entry.
+export const CHORD_TONE_INTERVALS = {
+  major: [['P', 1], ['M', 3], ['P', 5]],
+  minor: [['P', 1], ['m', 3], ['P', 5]],
+  aug: [['P', 1], ['M', 3], ['A', 5]],
+  dim: [['P', 1], ['m', 3], ['d', 5]],
+  '7': [['P', 1], ['M', 3], ['P', 5], ['m', 7]],
+  M7: [['P', 1], ['M', 3], ['P', 5], ['M', 7]],
+  m7: [['P', 1], ['m', 3], ['P', 5], ['m', 7]],
+  m7b5: [['P', 1], ['m', 3], ['d', 5], ['m', 7]],
+  dim7: [['P', 1], ['m', 3], ['d', 5], ['d', 7]]
+}
+
+// Correctly-spelled chord tones for a chord type at a given root (pitch
+// class 0-11), anchored near the given octave. Returns null if any tone
+// would need a double sharp/flat (outside this app's spelling system).
+export function buildChordSpelling(rootPc, type, opts = {}) {
+  const octave = opts.octave != null ? opts.octave : 4
+  const intervals = CHORD_TONE_INTERVALS[type]
+  if (!intervals) return null
+  const { letter, accidental } = parseSpelling(CANONICAL_ROOTS[rootPc])
+  const notes = []
+  for (const [quality, number] of intervals) {
+    const n = noteFromInterval(letter, accidental, octave, quality, number)
+    if (!n) return null
+    notes.push(n)
+  }
+  return notes
+}
