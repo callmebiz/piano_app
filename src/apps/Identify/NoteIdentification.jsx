@@ -109,7 +109,7 @@ export default function NoteIdentification({ pressedNotes, setKeyboardTargetPCs 
       <div className="identify-card">
         {current ? (
           <div className="identify-staff-wrap">
-            <div style={{ maxWidth: 480, width: '100%' }}>
+            <div style={{ width: 260 }}>
               <Staff clef={staffClef} notes={staffNotes} minHeight={160} />
             </div>
           </div>
