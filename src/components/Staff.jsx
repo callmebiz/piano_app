@@ -51,7 +51,6 @@ export default function Staff({ clef = 'treble', notes = [], keySignature, minHe
     const el = containerRef.current
     if (!el || width <= 0) return
     el.innerHTML = ''
-    if (!notes || notes.length === 0) return
 
     try {
       // Scale up/down uniformly: keep the visible box the same size (width x
@@ -74,6 +73,8 @@ export default function Staff({ clef = 'treble', notes = [], keySignature, minHe
       if (keySignature) stave.addKeySignature(keySignature)
       stave.setStyle({ fillStyle: color, strokeStyle: color })
       stave.setContext(context).draw()
+
+      if (!notes || notes.length === 0) return
 
       const staveNotes = notes.map((moment) => {
         const sn = new StaveNote({ keys: moment.keys, duration: moment.duration || 'w', clef })

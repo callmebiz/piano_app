@@ -1,16 +1,19 @@
 import React, { useState } from 'react'
 import NoteIdentification from './NoteIdentification'
+import KeySignatureIdentification from './KeySignatureIdentification'
+import IntervalIdentification from './IntervalIdentification'
+import ScaleIdentification from './ScaleIdentification'
+import ChordIdentification from './ChordIdentification'
 
-// Tab shell for the "Staff Identification" exercise family. Only Note is
-// wired up so far — Key Signature/Interval/Scale/Chord reuse this same
-// shell (Staff.jsx + useIdentifyExercise) when they're built, each just
-// swapping in a different prompt pool and answer UI.
+// Tab shell for the "Staff Identification" exercise family. Every tab
+// reuses the same shell (Staff.jsx + useIdentifyExercise + AnswerGrid +
+// staffSettings), each just swapping in its own prompt pool and answer set.
 const TABS = [
   { id: 'note', title: 'Note', enabled: true },
-  { id: 'keysig', title: 'Key Signature', enabled: false },
-  { id: 'interval', title: 'Interval', enabled: false },
-  { id: 'scale', title: 'Scale', enabled: false },
-  { id: 'chord', title: 'Chord', enabled: false }
+  { id: 'keysig', title: 'Key Signature', enabled: true },
+  { id: 'interval', title: 'Interval', enabled: true },
+  { id: 'scale', title: 'Scale', enabled: true },
+  { id: 'chord', title: 'Chord', enabled: true }
 ]
 
 export default function Identify({ pressedNotes, setKeyboardTargetPCs }) {
@@ -35,6 +38,10 @@ export default function Identify({ pressedNotes, setKeyboardTargetPCs }) {
       </div>
 
       {tab === 'note' && <NoteIdentification pressedNotes={pressedNotes} setKeyboardTargetPCs={setKeyboardTargetPCs} />}
+      {tab === 'keysig' && <KeySignatureIdentification />}
+      {tab === 'interval' && <IntervalIdentification />}
+      {tab === 'scale' && <ScaleIdentification />}
+      {tab === 'chord' && <ChordIdentification />}
     </div>
   )
 }

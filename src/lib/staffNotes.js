@@ -18,9 +18,30 @@ function accidentalShift(accidental) {
 // but is written in octave 3's B position; Cb4 sounds as B3 (midi 59). Not
 // pre-wrapping the pitch class before adding the octave base is what makes
 // that fall out correctly.
-function spellingMidi(letter, accidental, octave) {
+export function spellingMidi(letter, accidental, octave) {
   return (octave + 1) * 12 + LETTER_PC[letter] + accidentalShift(accidental)
 }
+
+export function vexKeyFor(letter, accidental, octave) {
+  return `${letter.toLowerCase()}${accidental}/${octave}`
+}
+
+const VEX_LETTERS_SHARP = ['c', 'c#', 'd', 'd#', 'e', 'f', 'f#', 'g', 'g#', 'a', 'a#', 'b']
+
+// Simple sharp-spelled midi -> vexKey, for reusing the existing pitch-class-
+// only sequences from lib/scales.js/lib/chords.js (Scale ID, Chord ID) where
+// exact enharmonic spelling isn't the point of the exercise — unlike Note ID,
+// which needs the full letter+accidental model above.
+export function midiToVexKey(midi) {
+  const pc = ((midi % 12) + 12) % 12
+  const octave = Math.floor(midi / 12) - 1
+  return `${VEX_LETTERS_SHARP[pc]}/${octave}`
+}
+
+// The 15 standard major key signatures, in circle-of-fifths order (natural,
+// then sharp side, then flat side) — VexFlow's addKeySignature draws the
+// correct sharps/flats for each from the name alone.
+export const MAJOR_KEY_SIGNATURES = ['C', 'G', 'D', 'A', 'E', 'B', 'F#', 'C#', 'F', 'Bb', 'Eb', 'Ab', 'Db', 'Gb', 'Cb']
 
 export function parseSpelling(name) {
   const letter = name[0]
