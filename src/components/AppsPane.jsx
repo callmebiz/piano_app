@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { appsFor } from '../apps/registry'
 
 export default function AppsPane({ active = 'chord', onSelect }) {
   const [collapsed, setCollapsed] = useState(false)
@@ -6,14 +7,7 @@ export default function AppsPane({ active = 'chord', onSelect }) {
   useEffect(() => {
     try { document.documentElement.classList.toggle('apps-closed', collapsed) } catch (e) {}
   }, [collapsed])
-  const apps = [
-    { id: 'chord', title: 'Chord Recognition', subtitle: 'Identify played chords' },
-    { id: 'play', title: 'Play The Chord', subtitle: 'Play highlighted chords on your keyboard' },
-    { id: 'scales', title: 'Scales', subtitle: 'Practice scales in order' },
-    { id: 'keycenter', title: 'Key Center', subtitle: 'Diatonic chords & secondary dominants' },
-    { id: 'visualizer', title: 'Visualizer', subtitle: 'Key visualizer' },
-    // future apps can be added here
-  ]
+  const apps = appsFor('desktop')
 
   return (
     <>

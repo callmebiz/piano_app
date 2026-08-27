@@ -71,6 +71,21 @@ export default function Keyboard({ pressedNotes, onNoteOn, onNoteOff, onHeightCh
   }
 
   const wrapperRef = useRef(null)
+  const keyboardScrollRef = useRef(null)
+
+  // On narrow screens the keyboard scrolls horizontally instead of shrinking
+  // illegibly (see the mobile breakpoint in styles.css) — land on middle C
+  // by default rather than wherever flex layout happens to start.
+  React.useEffect(() => {
+    if (collapsed) return
+    const raf = requestAnimationFrame(() => {
+      try {
+        const el = keyboardScrollRef.current && keyboardScrollRef.current.querySelector('[data-midi="60"]')
+        if (el) el.scrollIntoView({ inline: 'center', block: 'nearest' })
+      } catch (e) {}
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [collapsed])
 
   // no inline CSS vars required; CSS controls key heights
   const inlineVars = undefined
@@ -90,7 +105,7 @@ export default function Keyboard({ pressedNotes, onNoteOn, onNoteOff, onHeightCh
 
       {!collapsed && (
         <>
-          <div className="keyboard" role="application" aria-label="88-key keyboard">
+          <div className="keyboard" ref={keyboardScrollRef} role="application" aria-label="88-key keyboard">
             {keys.map((n) => {
               const black = isBlackKey(n)
               const active = combinedPressed.has(n)

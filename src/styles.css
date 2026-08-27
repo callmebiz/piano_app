@@ -328,8 +328,33 @@ html,body{height:100%;}
 
 @media (max-width:600px){
   .apps-pane{display:none}
-  .content{margin-left:0;max-width:100%}
+  .apps-tab{display:none}
+  .content{margin-left:0;max-width:100%;padding-top:64px}
   .keyboard-wrapper{left:0}
+  /* justify-content:center clips the overflowing left half of the keyboard
+     out of scroll range (scrollLeft can't go negative) — switch to
+     flex-start so the full 88-key range is reachable, and Keyboard.jsx
+     scrolls to middle C on mount to land somewhere useful by default */
+  .keyboard{justify-content:flex-start}
+}
+
+/* Mobile top nav — replaces the sidebar below the mobile breakpoint */
+.mobile-nav{
+  display:none;
+}
+@media (max-width:600px){
+  .mobile-nav{
+    display:flex;position:fixed;left:0;right:0;top:0;height:48px;z-index:950;
+    background:var(--panel);border-bottom:1px solid rgba(255,255,255,0.04);
+    overflow-x:auto;align-items:stretch;gap:2px;padding:0 6px;box-sizing:border-box;
+  }
+  .mobile-nav-item{
+    flex:0 0 auto;display:flex;align-items:center;justify-content:center;
+    padding:0 14px;font-size:13px;font-weight:600;color:var(--muted);
+    background:transparent;border:none;border-bottom:2px solid transparent;
+    cursor:pointer;white-space:nowrap;
+  }
+  .mobile-nav-item.active{color:var(--accent);border-bottom-color:var(--accent)}
 }
 
 /* center inner content area and constrain width for better design */

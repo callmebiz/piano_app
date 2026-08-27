@@ -2,6 +2,8 @@ import React, { useEffect, useState, useCallback } from 'react'
 import { initMIDI } from './midi'
 import Keyboard from './components/Keyboard'
 import AppsPane from './components/AppsPane'
+import MobileNav from './components/MobileNav'
+import { useViewportClass } from './lib/capabilities'
 import ChordRecognition from './apps/ChordRecognition/ChordRecognition'
 import ErrorBoundary from './components/ErrorBoundary'
 import PlayTheChord from './apps/PlayTheChord/PlayTheChord'
@@ -69,6 +71,7 @@ export default function App() {
   const [keyboardCollapsed, setKeyboardCollapsed] = useState(false)
   const [shrinkOn, setShrinkOn] = useState(false)
   const [freezeOn, setFreezeOn] = useState(false)
+  const viewportClass = useViewportClass()
 
   // ensure keyboard is always visible while Visualizer is active
   useEffect(() => {
@@ -101,7 +104,9 @@ export default function App() {
 
   return (
     <div className="app" style={{ ['--piano-height']: keyboardCollapsed ? '0px' : `${keyboardHeightPx}px`, ['--sidebar-width']: '240px' }}>
-      <AppsPane active={selectedApp} onSelect={(id) => setSelectedApp(id)} />
+      {viewportClass === 'mobile'
+        ? <MobileNav active={selectedApp} onSelect={(id) => setSelectedApp(id)} />
+        : <AppsPane active={selectedApp} onSelect={(id) => setSelectedApp(id)} />}
       <div className="global-theme-toggle">
         <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label="Toggle theme">{theme === 'dark' ? '🌙' : '☀️'}</button>
         <button onClick={() => setShowSettings(true)} title="Settings" style={{marginLeft:8}}>⚙️</button>

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- transparent background — this is the adaptive-icon foreground layer, kept
+       within the safe zone since Android masks/crops the outer edges -->
+  <g>
+    <rect x="202" y="300" width="140" height="500" rx="24" fill="#f5f7fa"/>
+    <rect x="362" y="300" width="140" height="500" rx="24" fill="#f5f7fa"/>
+    <rect x="522" y="300" width="140" height="500" rx="24" fill="#f5f7fa"/>
+    <rect x="682" y="300" width="140" height="500" rx="24" fill="#f5f7fa"/>
+  </g>
+  <g fill="#6ee7b7">
+    <rect x="312" y="300" width="80" height="320" rx="16"/>
+    <rect x="472" y="300" width="80" height="320" rx="16"/>
+    <rect x="632" y="300" width="80" height="320" rx="16"/>
+  </g>
+</svg>
