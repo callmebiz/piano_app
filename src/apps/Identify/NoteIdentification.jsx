@@ -108,29 +108,30 @@ export default function NoteIdentification({ pressedNotes, setKeyboardTargetPCs 
         </div>
       </div>
 
-      <div style={{ zoom: staffSettings.uiScale }}>
-        <div className="identify-header">Note Identification</div>
-        <div className="identify-card">
-          {current ? (
-            <div className="identify-staff-wrap" style={{ justifyContent: staffSettings.align === 'left' ? 'flex-start' : staffSettings.align === 'right' ? 'flex-end' : 'center' }}>
-              <div style={{ width: staffSettings.width }}>
-                <Staff clef={staffClef} notes={staffNotes} minHeight={160} scale={staffSettings.scale} />
-              </div>
+      <div className="identify-header">Note Identification</div>
+      <div className="identify-card">
+        {current ? (
+          <div className="identify-staff-wrap" style={{ justifyContent: staffSettings.align === 'left' ? 'flex-start' : staffSettings.align === 'right' ? 'flex-end' : 'center' }}>
+            {/* width grows with scale too, so turning "Staff & note size" up
+                enlarges the whole staff box + its rendered content together,
+                rather than cramming a bigger note into a fixed-size box */}
+            <div style={{ width: staffSettings.width * staffSettings.scale }}>
+              <Staff clef={staffClef} notes={staffNotes} minHeight={160} scale={staffSettings.scale} />
             </div>
-          ) : (
-            <div className="muted" style={{ textAlign: 'center', padding: '2rem' }}>No notes available for the current options</div>
-          )}
-
-          <AnswerGrid rows={ANSWER_ROWS} columns={7} onSelect={submitAnswer} cellState={cellState} disabled={!current || !!lastResult} />
-
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16, marginTop: 20 }}>
-            <button className="primary-btn" onClick={skip} disabled={!current}>Skip</button>
-            <div style={{ fontSize: 13, color: 'var(--muted)' }}>
-              <strong>Score:</strong> {score.correct}/{score.total}
-              {score.total > 0 ? ` (${Math.round((score.correct / score.total) * 100)}%)` : ''}
-            </div>
-            <button className="play-cat-btn" onClick={resetScore}>Reset Score</button>
           </div>
+        ) : (
+          <div className="muted" style={{ textAlign: 'center', padding: '2rem' }}>No notes available for the current options</div>
+        )}
+
+        <AnswerGrid rows={ANSWER_ROWS} columns={7} onSelect={submitAnswer} cellState={cellState} disabled={!current || !!lastResult} />
+
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16, marginTop: 20 }}>
+          <button className="primary-btn" onClick={skip} disabled={!current}>Skip</button>
+          <div style={{ fontSize: 13, color: 'var(--muted)' }}>
+            <strong>Score:</strong> {score.correct}/{score.total}
+            {score.total > 0 ? ` (${Math.round((score.correct / score.total) * 100)}%)` : ''}
+          </div>
+          <button className="play-cat-btn" onClick={resetScore}>Reset Score</button>
         </div>
       </div>
     </div>

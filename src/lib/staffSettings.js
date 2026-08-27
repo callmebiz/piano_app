@@ -10,10 +10,9 @@ const STORAGE_KEY = 'staff:settings'
 const CHANGE_EVENT = 'staffsettingschange'
 
 export const STAFF_DEFAULTS = {
-  width: 260, // px — the staff box's width (controls note-to-staff-space ratio)
-  scale: 1, // 0.7–1.6 — visual size of the clef/staff/notehead only
-  align: 'center', // 'left' | 'center' | 'right'
-  uiScale: 1 // 0.7–2 — zooms the whole Identify card (header, staff, answer grid) as one unit
+  width: 260, // px — the staff box's base width at scale 1 (controls note-to-staff-space ratio)
+  scale: 1, // 0.7–1.6 — grows the staff box and its rendered content together (staff/notes only)
+  align: 'center' // 'left' | 'center' | 'right'
 }
 
 let settings = { ...STAFF_DEFAULTS }

@@ -244,9 +244,9 @@ export default function Settings({ open = false, onClose = () => {}, app = '', s
                 <div style={{width:40,textAlign:'right',fontSize:12}}>{staff.width}</div>
               </div>
 
-              <div style={{fontWeight:600}}>Note/clef size</div>
+              <div style={{fontWeight:600}}>Staff & note size</div>
               <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                <input type="range" min={70} max={160} value={Math.round(staff.scale * 100)} onChange={e => updateStaff({ scale: Number(e.target.value) / 100 })} style={{flex:1, minWidth:0}} />
+                <input type="range" min={70} max={250} value={Math.round(staff.scale * 100)} onChange={e => updateStaff({ scale: Number(e.target.value) / 100 })} style={{flex:1, minWidth:0}} />
                 <div style={{width:40,textAlign:'right',fontSize:12}}>{Math.round(staff.scale * 100)}%</div>
               </div>
 
@@ -267,13 +267,6 @@ export default function Settings({ open = false, onClose = () => {}, app = '', s
                   </button>
                 ))}
               </div>
-
-              <div style={{fontWeight:600}}>Overall size</div>
-              <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                <input type="range" min={70} max={200} value={Math.round(staff.uiScale * 100)} onChange={e => updateStaff({ uiScale: Number(e.target.value) / 100 })} style={{flex:1, minWidth:0}} />
-                <div style={{width:40,textAlign:'right',fontSize:12}}>{Math.round(staff.uiScale * 100)}%</div>
-              </div>
-              <div style={{gridColumn:'1 / -1',fontSize:12,color:'var(--muted)',marginTop:-4}}>Zooms the whole exercise card — header, staff and answer buttons together.</div>
             </>
           )}
 
