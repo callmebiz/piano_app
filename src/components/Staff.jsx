@@ -12,7 +12,7 @@ import { Renderer, Stave, StaveNote, Voice, Formatter, Accidental } from 'vexflo
 const DARK_COLOR = '#f5f7fa' // staff/notes in dark theme: white
 const LIGHT_COLOR = '#1a2332' // staff/notes in light theme: dark
 
-export default function Staff({ clef = 'treble', notes = [], keySignature, minHeight = 160 }) {
+export default function Staff({ clef = 'treble', notes = [], keySignature, minHeight = 160, scale = 1 }) {
   const containerRef = useRef(null)
   const [width, setWidth] = useState(360)
 
@@ -54,16 +54,21 @@ export default function Staff({ clef = 'treble', notes = [], keySignature, minHe
     if (!notes || notes.length === 0) return
 
     try {
-      const height = minHeight
+      // Scale up/down uniformly: keep the visible box the same size (width x
+      // minHeight) but lay out and draw everything in a proportionally
+      // smaller/larger logical space, so a higher scale reads as a bigger
+      // clef/staff/notehead rather than a wider box.
+      const height = minHeight * scale
       const renderer = new Renderer(el, Renderer.Backends.SVG)
       renderer.resize(width, height)
       const context = renderer.getContext()
+      context.scale(scale, scale)
 
       const color = document.documentElement.classList.contains('light') ? LIGHT_COLOR : DARK_COLOR
       context.setFillStyle(color)
       context.setStrokeStyle(color)
 
-      const staveWidth = Math.max(120, width - 20)
+      const staveWidth = Math.max(120, (width - 20) / scale)
       const stave = new Stave(10, 20, staveWidth)
       stave.addClef(clef)
       if (keySignature) stave.addKeySignature(keySignature)
@@ -88,7 +93,7 @@ export default function Staff({ clef = 'treble', notes = [], keySignature, minHe
     } catch (e) {
       console.error('Staff render error', e)
     }
-  }, [clef, notes, keySignature, width, minHeight, themeTick])
+  }, [clef, notes, keySignature, width, minHeight, scale, themeTick])
 
   return <div ref={containerRef} className="staff-container" style={{ width: '100%', minHeight }} />
 }

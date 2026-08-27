@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { getSynthParams, setSynthParams, SYNTH_DEFAULTS } from '../audio/engine'
+import { getStaffSettings, setStaffSettings, STAFF_DEFAULTS } from '../lib/staffSettings'
 
 const WAVEFORM_OPTIONS = [
   { value: 'sine', label: 'Sine (soft)' },
@@ -42,6 +43,10 @@ export default function Settings({ open = false, onClose = () => {}, app = '', s
   const [synth, setSynth] = useState(() => getSynthParams())
   const updateSynth = (partial) => setSynth(setSynthParams(partial))
   const resetSynth = () => setSynth(setSynthParams(SYNTH_DEFAULTS))
+
+  const [staff, setStaff] = useState(() => getStaffSettings())
+  const updateStaff = (partial) => setStaff(setStaffSettings(partial))
+  const resetStaff = () => setStaff(setStaffSettings(STAFF_DEFAULTS))
 
   useEffect(() => {
     // apply initial values to CSS variables on mount
@@ -225,6 +230,45 @@ export default function Settings({ open = false, onClose = () => {}, app = '', s
             <input type="range" min={0} max={100} value={synth.brightness} onChange={e => updateSynth({ brightness: Number(e.target.value) })} style={{flex:1, minWidth:0}} />
             <div style={{width:40,textAlign:'right',fontSize:12}}>{synth.brightness}</div>
           </div>
+
+          {app === 'identify' && (
+            <>
+              <div style={{gridColumn:'1 / -1', marginTop:10, paddingTop:10, borderTop:'1px solid rgba(255,255,255,0.06)', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                <div style={{fontWeight:700, color:'var(--accent)'}}>Staff</div>
+                <button onClick={resetStaff} title="Reset staff size/position to defaults" style={{padding:'6px 10px',borderRadius:6,border:'1px solid rgba(255,255,255,0.06)',background:'transparent',color:'var(--muted)'}}>Reset staff</button>
+              </div>
+
+              <div style={{fontWeight:600}}>Staff width (px)</div>
+              <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                <input type="range" min={150} max={500} step={10} value={staff.width} onChange={e => updateStaff({ width: Number(e.target.value) })} style={{flex:1, minWidth:0}} />
+                <div style={{width:40,textAlign:'right',fontSize:12}}>{staff.width}</div>
+              </div>
+
+              <div style={{fontWeight:600}}>Note/clef size</div>
+              <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                <input type="range" min={70} max={160} value={Math.round(staff.scale * 100)} onChange={e => updateStaff({ scale: Number(e.target.value) / 100 })} style={{flex:1, minWidth:0}} />
+                <div style={{width:40,textAlign:'right',fontSize:12}}>{Math.round(staff.scale * 100)}%</div>
+              </div>
+
+              <div style={{fontWeight:600}}>Alignment</div>
+              <div style={{display:'flex',gap:8}}>
+                {['left','center','right'].map(a => (
+                  <button
+                    key={a}
+                    onClick={() => updateStaff({ align: a })}
+                    style={{
+                      padding:'6px 10px',borderRadius:6,cursor:'pointer',textTransform:'capitalize',
+                      border: staff.align === a ? '1px solid transparent' : '1px solid rgba(255,255,255,0.06)',
+                      background: staff.align === a ? 'var(--accent)' : 'transparent',
+                      color: staff.align === a ? '#071025' : 'var(--muted)'
+                    }}
+                  >
+                    {a}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
 
           {app === 'visualizer' && (
             <>

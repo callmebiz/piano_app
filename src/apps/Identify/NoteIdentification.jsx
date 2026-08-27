@@ -3,6 +3,7 @@ import Staff from '../../components/Staff'
 import AnswerGrid from './AnswerGrid'
 import useIdentifyExercise from './useIdentifyExercise'
 import { buildSpellingPool, SHARP_NAMES, NATURAL_NAMES, FLAT_NAMES, ALL_SPELLINGS } from '../../lib/staffNotes'
+import { useStaffSettings } from '../../lib/staffSettings'
 
 // Clef ranges: treble/bass span a comfortable couple of octaves either side
 // of middle C; grand unions both and resolves each prompt to whichever
@@ -21,6 +22,8 @@ const clefForMidi = (midi) => (midi < 60 ? 'bass' : 'treble')
 const ANSWER_ROWS = [SHARP_NAMES, NATURAL_NAMES, FLAT_NAMES].map((row) => row.map((name) => ({ label: name, value: name })))
 
 export default function NoteIdentification({ pressedNotes, setKeyboardTargetPCs = () => {} }) {
+  const staffSettings = useStaffSettings()
+
   const loadClefMode = () => {
     try { const raw = localStorage.getItem('identify:note:clef'); if (raw) return raw } catch (e) {}
     return 'treble'
@@ -108,9 +111,9 @@ export default function NoteIdentification({ pressedNotes, setKeyboardTargetPCs 
       <div className="identify-header">Note Identification</div>
       <div className="identify-card">
         {current ? (
-          <div className="identify-staff-wrap">
-            <div style={{ width: 260 }}>
-              <Staff clef={staffClef} notes={staffNotes} minHeight={160} />
+          <div className="identify-staff-wrap" style={{ justifyContent: staffSettings.align === 'left' ? 'flex-start' : staffSettings.align === 'right' ? 'flex-end' : 'center' }}>
+            <div style={{ width: staffSettings.width }}>
+              <Staff clef={staffClef} notes={staffNotes} minHeight={160} scale={staffSettings.scale} />
             </div>
           </div>
         ) : (
