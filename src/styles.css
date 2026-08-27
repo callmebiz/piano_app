@@ -373,6 +373,18 @@ html,body{height:100%;}
 /* Chord Recognition app styles */
 .chord-app{background:var(--panel);padding:12px;border-radius:10px;margin-bottom:12px;border:1px solid rgba(255,255,255,0.03)}
 .chord-app h2{margin:0 0 8px 0;color:var(--accent)}
+
+/* Identify exercises: title bar + card, styled to sit visually as one unit */
+.identify-header{background:var(--panel-solid);color:var(--muted);text-align:center;font-size:15px;font-weight:600;padding:14px;border-radius:10px 10px 0 0;border:1px solid rgba(255,255,255,0.06);border-bottom:none}
+.identify-card{background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:0 0 10px 10px;padding:24px}
+.identify-staff-wrap{display:flex;justify-content:flex-start}
+.identify-grid{display:grid;gap:8px;margin-top:20px}
+.identify-cell{padding:14px 8px;text-align:center;border-radius:6px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.02);color:var(--muted);font-weight:600;font-size:14px;cursor:pointer;transition:all .12s ease}
+.identify-cell:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+.identify-cell:disabled{cursor:not-allowed;opacity:0.5}
+.identify-cell.correct{background:var(--accent);color:#071025;border-color:transparent;opacity:1}
+.identify-cell.wrong{background:#ff6b6b;color:#071025;border-color:transparent;opacity:1}
+.identify-cell.empty{visibility:hidden;pointer-events:none;border:none;background:none;padding:14px 8px}
 .chord-panels{display:flex;gap:18px;align-items:flex-start}
 .main-match{flex:2;display:flex;align-items:center;justify-content:center}
 .primary{background:transparent;text-align:center;padding:18px}

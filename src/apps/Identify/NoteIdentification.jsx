@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import Staff from '../../components/Staff'
+import AnswerGrid from './AnswerGrid'
 import useIdentifyExercise from './useIdentifyExercise'
-import { buildNotePool, NATURAL_NOTE_NAMES, CHROMATIC_NOTE_NAMES } from '../../lib/staffNotes'
+import { buildSpellingPool, SHARP_NAMES, NATURAL_NAMES, FLAT_NAMES, ALL_SPELLINGS } from '../../lib/staffNotes'
 
 // Clef ranges: treble/bass span a comfortable couple of octaves either side
 // of middle C; grand unions both and resolves each prompt to whichever
@@ -12,6 +13,12 @@ const RANGES = {
   grand: { lowMidi: 36, highMidi: 84 }
 }
 const clefForMidi = (midi) => (midi < 60 ? 'bass' : 'treble')
+
+// Fixed 21-cell answer grid (sharp row / natural row / flat row) — always
+// shown in full regardless of the current options, same as the reference
+// layout; which spellings are actually eligible to be *asked* is controlled
+// by the Accidentals toggle below.
+const ANSWER_ROWS = [SHARP_NAMES, NATURAL_NAMES, FLAT_NAMES].map((row) => row.map((name) => ({ label: name, value: name })))
 
 export default function NoteIdentification({ pressedNotes, setKeyboardTargetPCs = () => {} }) {
   const loadClefMode = () => {
@@ -30,23 +37,24 @@ export default function NoteIdentification({ pressedNotes, setKeyboardTargetPCs 
 
   const pool = useMemo(() => {
     const { lowMidi, highMidi } = RANGES[clefMode]
-    return buildNotePool({ lowMidi, highMidi, accidentals })
+    return buildSpellingPool({ lowMidi, highMidi, spellings: accidentals ? ALL_SPELLINGS : NATURAL_NAMES })
   }, [clefMode, accidentals])
 
   const { current, score, lastResult, submitAnswer, skip, resetScore } = useIdentifyExercise({
     pool,
-    isCorrect: (prompt, answer) => prompt.name === answer,
+    // Button answers are exact-spelling strings; keyboard answers are a
+    // sounding pitch class (a physical key can't disambiguate spelling).
+    isCorrect: (prompt, answer) => (typeof answer === 'number' ? answer === prompt.pc : answer === prompt.name),
     statsKey: 'identify:note:stats',
-    promptKey: (p) => String(p.midi)
+    promptKey: (p) => `${p.name}${p.midi}`
   })
 
-  const answerNames = accidentals ? CHROMATIC_NOTE_NAMES : NATURAL_NOTE_NAMES
   const staffClef = current ? (clefMode === 'grand' ? clefForMidi(current.midi) : clefMode) : 'treble'
   const staffNotes = current ? [{ keys: [current.vexKey], duration: 'w' }] : []
 
   // Answer by playing the note too (physical MIDI or the on-screen keyboard,
   // both already flow through the same pressedNotes prop) — a newly-pressed
-  // key counts as your answer, same as clicking a name button.
+  // key counts as your answer, same as clicking a name cell.
   const prevPressedRef = useRef(new Set())
   useEffect(() => {
     const currSet = pressedNotes ? (pressedNotes instanceof Set ? pressedNotes : new Set(Array.from(pressedNotes))) : new Set()
@@ -55,28 +63,25 @@ export default function NoteIdentification({ pressedNotes, setKeyboardTargetPCs 
     for (const n of currSet) if (!prev.has(n)) added.push(n)
     prevPressedRef.current = currSet
     if (added.length > 0 && current && !lastResult) {
-      const pc = ((added[0] % 12) + 12) % 12
-      submitAnswer(CHROMATIC_NOTE_NAMES[pc])
+      submitAnswer(((added[0] % 12) + 12) % 12)
     }
   }, [pressedNotes, current, lastResult, submitAnswer])
 
   // Don't reveal the answer via the target-highlight ring — only push the
   // correct pitch class for wrong-key (red) detection while guessing, then
   // reveal the actual key once feedback is showing, matching how the answer
-  // buttons reveal the correct choice in green on a wrong guess.
+  // grid reveals the correct cell in green after a wrong guess.
   useEffect(() => {
     if (!current) { setKeyboardTargetPCs(new Set()); return }
-    const pc = ((current.midi % 12) + 12) % 12
-    setKeyboardTargetPCs({ mids: lastResult ? new Set([current.midi]) : new Set(), pcs: new Set([pc]) })
+    setKeyboardTargetPCs({ mids: lastResult ? new Set([current.midi]) : new Set(), pcs: new Set([current.pc]) })
     return () => setKeyboardTargetPCs(new Set())
   }, [current, lastResult, setKeyboardTargetPCs])
 
-  const buttonStyle = (name) => {
-    if (lastResult) {
-      if (current && name === current.name) return { background: '#6ee7b7', color: '#071025', borderColor: 'transparent' }
-      if (name === lastResult.answer && !lastResult.correct) return { background: '#ff6b6b', color: '#071025', borderColor: 'transparent' }
-    }
-    return {}
+  const cellState = (name) => {
+    if (!lastResult) return null
+    if (current && name === current.name) return 'correct'
+    if (typeof lastResult.answer === 'string' && name === lastResult.answer && !lastResult.correct) return 'wrong'
+    return null
   }
 
   return (
@@ -100,36 +105,27 @@ export default function NoteIdentification({ pressedNotes, setKeyboardTargetPCs 
         </div>
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'center' }}>
-        <div style={{ width: '100%', maxWidth: 700, background: 'rgba(255,255,255,0.02)', padding: 18, borderRadius: 8 }}>
-          {current ? (
-            <Staff clef={staffClef} notes={staffNotes} />
-          ) : (
-            <div className="muted" style={{ textAlign: 'center', padding: '2rem' }}>No notes available for the current options</div>
-          )}
-
-          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginTop: 20 }}>
-            {answerNames.map((name) => (
-              <button
-                key={name}
-                className="play-cat-btn"
-                style={{ minWidth: 48, fontSize: 15, fontWeight: 700, ...buttonStyle(name) }}
-                onClick={() => submitAnswer(name)}
-                disabled={!current || !!lastResult}
-              >
-                {name}
-              </button>
-            ))}
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16, marginTop: 20 }}>
-            <button className="primary-btn" onClick={skip} disabled={!current}>Skip</button>
-            <div style={{ fontSize: 13, color: 'var(--muted)' }}>
-              <strong>Score:</strong> {score.correct}/{score.total}
-              {score.total > 0 ? ` (${Math.round((score.correct / score.total) * 100)}%)` : ''}
+      <div className="identify-header">Note Identification</div>
+      <div className="identify-card">
+        {current ? (
+          <div className="identify-staff-wrap">
+            <div style={{ maxWidth: 480, width: '100%' }}>
+              <Staff clef={staffClef} notes={staffNotes} minHeight={160} />
             </div>
-            <button className="play-cat-btn" onClick={resetScore}>Reset Score</button>
           </div>
+        ) : (
+          <div className="muted" style={{ textAlign: 'center', padding: '2rem' }}>No notes available for the current options</div>
+        )}
+
+        <AnswerGrid rows={ANSWER_ROWS} columns={7} onSelect={submitAnswer} cellState={cellState} disabled={!current || !!lastResult} />
+
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16, marginTop: 20 }}>
+          <button className="primary-btn" onClick={skip} disabled={!current}>Skip</button>
+          <div style={{ fontSize: 13, color: 'var(--muted)' }}>
+            <strong>Score:</strong> {score.correct}/{score.total}
+            {score.total > 0 ? ` (${Math.round((score.correct / score.total) * 100)}%)` : ''}
+          </div>
+          <button className="play-cat-btn" onClick={resetScore}>Reset Score</button>
         </div>
       </div>
     </div>
