@@ -67,10 +67,7 @@ export default function App() {
     try { localStorage.setItem('piano:theme', theme) } catch (e) {}
   }, [theme])
 
-  // No app is enabled by default right now (see src/apps/registry.js) while
-  // the Identification/Construction exercise set is being built — null means
-  // "nothing selected", which also keeps the on-screen keyboard hidden below.
-  const [selectedApp, setSelectedApp] = useState(null)
+  const [selectedApp, setSelectedApp] = useState('chord')
   const [keyboardTargetMidis, setKeyboardTargetMidis] = useState(new Set())
   const [keyboardTargetPCs, setKeyboardTargetPCs] = useState(new Set())
   const [showSettings, setShowSettings] = useState(false)

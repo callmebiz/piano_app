@@ -9,9 +9,23 @@ import { Renderer, Stave, StaveNote, Voice, Formatter, Accidental } from 'vexflo
 // sequence — no changes needed here to support any of those later.
 //
 // notes: [{ keys: ['c/4'], duration: 'w' }, ...]
+const DARK_COLOR = '#f5f7fa' // staff/notes in dark theme: white
+const LIGHT_COLOR = '#1a2332' // staff/notes in light theme: dark
+
 export default function Staff({ clef = 'treble', notes = [], keySignature, minHeight = 160 }) {
   const containerRef = useRef(null)
   const [width, setWidth] = useState(360)
+
+  // VexFlow draws directly into an SVG context (not normal CSS-cascaded
+  // elements), so it doesn't pick up --muted/theme changes on its own —
+  // watch the <html> class the theme toggle flips and redraw when it does.
+  const [themeTick, setThemeTick] = useState(0)
+  useEffect(() => {
+    const root = document.documentElement
+    const mo = new MutationObserver(() => setThemeTick((t) => t + 1))
+    mo.observe(root, { attributes: true, attributeFilter: ['class'] })
+    return () => mo.disconnect()
+  }, [])
 
   useEffect(() => {
     const el = containerRef.current
@@ -45,14 +59,20 @@ export default function Staff({ clef = 'treble', notes = [], keySignature, minHe
       renderer.resize(width, height)
       const context = renderer.getContext()
 
+      const color = document.documentElement.classList.contains('light') ? LIGHT_COLOR : DARK_COLOR
+      context.setFillStyle(color)
+      context.setStrokeStyle(color)
+
       const staveWidth = Math.max(120, width - 20)
       const stave = new Stave(10, 20, staveWidth)
       stave.addClef(clef)
       if (keySignature) stave.addKeySignature(keySignature)
+      stave.setStyle({ fillStyle: color, strokeStyle: color })
       stave.setContext(context).draw()
 
       const staveNotes = notes.map((moment) => {
         const sn = new StaveNote({ keys: moment.keys, duration: moment.duration || 'w', clef })
+        sn.setStyle({ fillStyle: color, strokeStyle: color })
         moment.keys.forEach((k, i) => {
           if (k.includes('#')) sn.addModifier(new Accidental('#'), i)
           else if (k.includes('b')) sn.addModifier(new Accidental('b'), i)
@@ -68,7 +88,7 @@ export default function Staff({ clef = 'treble', notes = [], keySignature, minHe
     } catch (e) {
       console.error('Staff render error', e)
     }
-  }, [clef, notes, keySignature, width, minHeight])
+  }, [clef, notes, keySignature, width, minHeight, themeTick])
 
   return <div ref={containerRef} className="staff-container" style={{ width: '100%', minHeight }} />
 }
