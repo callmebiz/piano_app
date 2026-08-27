@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import Staff from '../../components/Staff'
 import AnswerGrid from './AnswerGrid'
 import useIdentifyExercise from './useIdentifyExercise'
@@ -17,12 +17,23 @@ const ANSWER_ROWS = [SHARP_NAMES, NATURAL_NAMES, FLAT_NAMES].map((row) =>
 export default function KeySignatureIdentification() {
   const staffSettings = useStaffSettings()
 
+  const loadClefMode = () => {
+    try { const raw = localStorage.getItem('identify:keysig:clef'); if (raw) return raw } catch (e) {}
+    return 'treble'
+  }
+  const [clefMode, setClefMode] = useState(loadClefMode)
+  useEffect(() => { try { localStorage.setItem('identify:keysig:clef', clefMode) } catch (e) {} }, [clefMode])
+
   const { current, score, lastResult, submitAnswer, skip, resetScore } = useIdentifyExercise({
     pool,
     isCorrect: (prompt, answer) => answer === prompt.name,
     statsKey: 'identify:keysig:stats',
     promptKey: (p) => p.name
   })
+
+  // Clef doesn't change *which* key signatures are possible (unlike Note ID's
+  // Clef+Accidentals, which change the actual pool) — it only changes how the
+  // current one is drawn, so no forced-reroll is needed here.
 
   const cellState = (name) => {
     if (!lastResult) return null
@@ -33,13 +44,26 @@ export default function KeySignatureIdentification() {
 
   return (
     <div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16 }}>
+        <div className="filter-block">
+          <div className="filter-title">Clef</div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+            {['treble', 'bass'].map((c) => (
+              <button key={c} className={`play-cat-btn ${clefMode === c ? 'active' : ''}`} onClick={() => setClefMode(c)}>
+                {c[0].toUpperCase() + c.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
       <div className="identify-header">Key Signature Identification</div>
       <div className="identify-card">
         {current ? (
           <>
             <div className="identify-staff-wrap" style={{ justifyContent: staffSettings.align === 'left' ? 'flex-start' : staffSettings.align === 'right' ? 'flex-end' : 'center' }}>
               <div style={{ width: staffSettings.width * staffSettings.scale }}>
-                <Staff clef="treble" notes={[]} keySignature={current.name} minHeight={160} scale={staffSettings.scale} />
+                <Staff clef={clefMode} notes={[]} keySignature={current.name} minHeight={160} scale={staffSettings.scale} />
               </div>
             </div>
             <div style={{ textAlign: 'center', marginTop: 8, fontSize: 20, color: 'var(--muted)' }}>___ Major</div>

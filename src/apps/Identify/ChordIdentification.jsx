@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import Staff from '../../components/Staff'
 import AnswerGrid from './AnswerGrid'
 import useIdentifyExercise from './useIdentifyExercise'
@@ -18,17 +18,17 @@ const CHORD_LABELS = {
   dim7: 'Diminished 7th'
 }
 
-const pool = (() => {
+function buildPool(enabledTypes) {
   const items = []
   for (let root = 0; root < 12; root++) {
-    for (const type of CHORD_TYPES) {
+    for (const type of enabledTypes) {
       const notes = buildChordSpelling(root, type, { octave: 4 })
       if (!notes) continue // would need a double sharp/flat at this root — skip
       items.push({ name: type, root, vexKeys: notes.map((n) => n.vexKey) })
     }
   }
   return items
-})()
+}
 
 // 2-column list of chord-type names, matching the reference layout.
 const ANSWER_ROWS = (() => {
@@ -44,12 +44,30 @@ const ANSWER_ROWS = (() => {
 export default function ChordIdentification() {
   const staffSettings = useStaffSettings()
 
+  const loadTypes = () => {
+    try { const raw = localStorage.getItem('identify:chord:types'); if (raw) return JSON.parse(raw) } catch (e) {}
+    return Object.fromEntries(CHORD_TYPES.map((t) => [t, true]))
+  }
+  const [types, setTypes] = useState(loadTypes)
+  useEffect(() => { try { localStorage.setItem('identify:chord:types', JSON.stringify(types)) } catch (e) {} }, [types])
+  const selectAll = () => setTypes(Object.fromEntries(CHORD_TYPES.map((t) => [t, true])))
+  const clearAll = () => setTypes(Object.fromEntries(CHORD_TYPES.map((t) => [t, false])))
+
+  const pool = useMemo(() => buildPool(CHORD_TYPES.filter((t) => types[t])), [types])
+
   const { current, score, lastResult, submitAnswer, skip, resetScore } = useIdentifyExercise({
     pool,
     isCorrect: (prompt, answer) => answer === prompt.name,
     statsKey: 'identify:chord:stats',
     promptKey: (p) => `${p.name}-${p.root}`
   })
+
+  // Same stale-pick issue as Note ID: without forcing a fresh pick, toggling
+  // a type back on can leave the currently-shown prompt unchanged.
+  useEffect(() => {
+    skip()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [types])
 
   const staffNotes = current ? [{ keys: current.vexKeys, duration: 'w' }] : []
 
@@ -62,6 +80,23 @@ export default function ChordIdentification() {
 
   return (
     <div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16 }}>
+        <div className="filter-block">
+          <div className="filter-title">Chord Types</div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 6, marginBottom: 8 }}>
+            <button className="play-cat-btn" onClick={selectAll}>Select All</button>
+            <button className="play-cat-btn" onClick={clearAll}>Clear All</button>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {CHORD_TYPES.map((t) => (
+              <button key={t} className={`play-cat-btn ${types[t] ? 'active' : ''}`} onClick={() => setTypes((s) => ({ ...s, [t]: !s[t] }))}>
+                {CHORD_LABELS[t]}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
       <div className="identify-header">Chord Identification</div>
       <div className="identify-card">
         {current ? (
@@ -71,7 +106,7 @@ export default function ChordIdentification() {
             </div>
           </div>
         ) : (
-          <div className="muted" style={{ textAlign: 'center', padding: '2rem' }}>No chords available</div>
+          <div className="muted" style={{ textAlign: 'center', padding: '2rem' }}>No chords available for the current options</div>
         )}
 
         <AnswerGrid rows={ANSWER_ROWS} columns={2} onSelect={submitAnswer} cellState={cellState} disabled={!current || !!lastResult} />

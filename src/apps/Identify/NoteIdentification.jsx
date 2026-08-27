@@ -52,8 +52,17 @@ export default function NoteIdentification({ pressedNotes, setKeyboardTargetPCs 
     promptKey: (p) => `${p.name}${p.midi}`
   })
 
-  const staffClef = current ? (clefMode === 'grand' ? clefForMidi(current.midi) : clefMode) : 'treble'
-  const staffNotes = current ? [{ keys: [current.vexKey], duration: 'w' }] : []
+  const staffNotes = current ? [{ keys: [current.vexKey], duration: 'w', clef: clefForMidi(current.midi) }] : []
+
+  // Switching Clef/Accidentals should always land on a fresh prompt matching
+  // the new options — without this, if the currently-shown prompt happens to
+  // still qualify under the new pool (e.g. Grand's pool is a superset of
+  // Treble's), nothing visibly changes and the toggle looks like it did
+  // nothing.
+  useEffect(() => {
+    skip()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clefMode, accidentals])
 
   // Answer by playing the note too (physical MIDI or the on-screen keyboard,
   // both already flow through the same pressedNotes prop) — a newly-pressed
@@ -116,7 +125,7 @@ export default function NoteIdentification({ pressedNotes, setKeyboardTargetPCs 
                 enlarges the whole staff box + its rendered content together,
                 rather than cramming a bigger note into a fixed-size box */}
             <div style={{ width: staffSettings.width * staffSettings.scale }}>
-              <Staff clef={staffClef} notes={staffNotes} minHeight={160} scale={staffSettings.scale} />
+              <Staff clef={clefMode} notes={staffNotes} minHeight={160} scale={staffSettings.scale} />
             </div>
           </div>
         ) : (
