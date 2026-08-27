@@ -13,7 +13,7 @@ const TABS = [
   { id: 'chord', title: 'Chord', enabled: false }
 ]
 
-export default function Identify() {
+export default function Identify({ pressedNotes, setKeyboardTargetPCs }) {
   const [tab, setTab] = useState('note')
 
   return (
@@ -34,7 +34,7 @@ export default function Identify() {
         ))}
       </div>
 
-      {tab === 'note' && <NoteIdentification />}
+      {tab === 'note' && <NoteIdentification pressedNotes={pressedNotes} setKeyboardTargetPCs={setKeyboardTargetPCs} />}
     </div>
   )
 }

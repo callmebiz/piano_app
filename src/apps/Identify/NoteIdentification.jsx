@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import Staff from '../../components/Staff'
 import useIdentifyExercise from './useIdentifyExercise'
 import { buildNotePool, NATURAL_NOTE_NAMES, CHROMATIC_NOTE_NAMES } from '../../lib/staffNotes'
@@ -13,7 +13,7 @@ const RANGES = {
 }
 const clefForMidi = (midi) => (midi < 60 ? 'bass' : 'treble')
 
-export default function NoteIdentification() {
+export default function NoteIdentification({ pressedNotes, setKeyboardTargetPCs = () => {} }) {
   const loadClefMode = () => {
     try { const raw = localStorage.getItem('identify:note:clef'); if (raw) return raw } catch (e) {}
     return 'treble'
@@ -43,6 +43,33 @@ export default function NoteIdentification() {
   const answerNames = accidentals ? CHROMATIC_NOTE_NAMES : NATURAL_NOTE_NAMES
   const staffClef = current ? (clefMode === 'grand' ? clefForMidi(current.midi) : clefMode) : 'treble'
   const staffNotes = current ? [{ keys: [current.vexKey], duration: 'w' }] : []
+
+  // Answer by playing the note too (physical MIDI or the on-screen keyboard,
+  // both already flow through the same pressedNotes prop) — a newly-pressed
+  // key counts as your answer, same as clicking a name button.
+  const prevPressedRef = useRef(new Set())
+  useEffect(() => {
+    const currSet = pressedNotes ? (pressedNotes instanceof Set ? pressedNotes : new Set(Array.from(pressedNotes))) : new Set()
+    const prev = prevPressedRef.current
+    const added = []
+    for (const n of currSet) if (!prev.has(n)) added.push(n)
+    prevPressedRef.current = currSet
+    if (added.length > 0 && current && !lastResult) {
+      const pc = ((added[0] % 12) + 12) % 12
+      submitAnswer(CHROMATIC_NOTE_NAMES[pc])
+    }
+  }, [pressedNotes, current, lastResult, submitAnswer])
+
+  // Don't reveal the answer via the target-highlight ring — only push the
+  // correct pitch class for wrong-key (red) detection while guessing, then
+  // reveal the actual key once feedback is showing, matching how the answer
+  // buttons reveal the correct choice in green on a wrong guess.
+  useEffect(() => {
+    if (!current) { setKeyboardTargetPCs(new Set()); return }
+    const pc = ((current.midi % 12) + 12) % 12
+    setKeyboardTargetPCs({ mids: lastResult ? new Set([current.midi]) : new Set(), pcs: new Set([pc]) })
+    return () => setKeyboardTargetPCs(new Set())
+  }, [current, lastResult, setKeyboardTargetPCs])
 
   const buttonStyle = (name) => {
     if (lastResult) {
