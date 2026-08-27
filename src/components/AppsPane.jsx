@@ -26,7 +26,7 @@ export default function AppsPane({ active = 'chord', onSelect }) {
           </button>
         ))}
       </div>
-      <div className="apps-footer">Select an app to begin</div>
+      <div className="apps-footer">{apps.length ? 'Select an app to begin' : 'No apps enabled — new exercises coming soon'}</div>
       </nav>
       <button
         className="apps-tab"

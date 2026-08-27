@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, Suspense, lazy } from 'react'
 import { initMIDI } from './midi'
 import Keyboard from './components/Keyboard'
 import AppsPane from './components/AppsPane'
@@ -12,6 +12,10 @@ import Scales from './apps/Scales/Scales'
 import KeyCenter from './apps/KeyCenter/KeyCenter'
 import Settings from './components/Settings'
 import { noteOn, noteOff } from './audio/engine'
+
+// VexFlow (pulled in by Identify's Staff renderer) is ~1.1MB on its own —
+// lazy-load so apps that don't touch staff notation never pay for it.
+const Identify = lazy(() => import('./apps/Identify/Identify'))
 
 export default function App() {
   const [keyboardHeightPx, setKeyboardHeightPx] = useState(220)
@@ -63,7 +67,10 @@ export default function App() {
     try { localStorage.setItem('piano:theme', theme) } catch (e) {}
   }, [theme])
 
-  const [selectedApp, setSelectedApp] = useState('chord')
+  // No app is enabled by default right now (see src/apps/registry.js) while
+  // the Identification/Construction exercise set is being built — null means
+  // "nothing selected", which also keeps the on-screen keyboard hidden below.
+  const [selectedApp, setSelectedApp] = useState(null)
   const [keyboardTargetMidis, setKeyboardTargetMidis] = useState(new Set())
   const [keyboardTargetPCs, setKeyboardTargetPCs] = useState(new Set())
   const [showSettings, setShowSettings] = useState(false)
@@ -123,10 +130,20 @@ export default function App() {
                 {selectedApp === 'scales' && <Scales pressedNotes={pressed} setKeyboardTargetPCs={setKeyboardTargets} />}
                 {selectedApp === 'keycenter' && <KeyCenter pressedNotes={pressed} setKeyboardTargetPCs={setKeyboardTargets} />}
                 {selectedApp === 'visualizer' && <Visualizer pressedNotes={pressed} shrinkOn={shrinkOn} freezeOn={freezeOn} />}
+                {selectedApp === 'identify' && (
+                  <Suspense fallback={<div className="muted" style={{ padding: '2rem' }}>Loading…</div>}>
+                    <Identify pressedNotes={pressed} setKeyboardTargetPCs={setKeyboardTargets} />
+                  </Suspense>
+                )}
+                {!selectedApp && (
+                  <div className="app-placeholder" style={{ padding: '2rem', opacity: 0.7 }}>
+                    New exercises are being built — check back soon.
+                  </div>
+                )}
               </ErrorBoundary>
             </div>
 
-            {!keyboardCollapsed && (
+            {!keyboardCollapsed && selectedApp && (
               <Keyboard
                 pressedNotes={pressed}
                   onNoteOn={(n) => {
