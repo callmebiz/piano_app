@@ -4,9 +4,15 @@ import AnswerGrid from './AnswerGrid'
 import useIdentifyExercise from './useIdentifyExercise'
 import { useStaffSettings } from '../../lib/staffSettings'
 import { parseSpelling, spellingMidi, vexKeyFor, CANONICAL_ROOTS } from '../../lib/staffNotes'
-import { noteFromInterval, INTERVAL_DEGREES, isPerfectFamily } from '../../lib/intervals'
+import { noteFromInterval, isPerfectFamily } from '../../lib/intervals'
 
 const ROOT_OCTAVE = 4
+
+// Unison through octave — lib/intervals.js's own INTERVAL_DEGREES starts at
+// 2 (matching the quality-grid reference layout), but this exercise also
+// wants unison in scope, both as a quality (P1/A1) and as a "distance".
+const NUMBERS = [1, 2, 3, 4, 5, 6, 7, 8]
+const NUMBER_LABELS = { 1: 'Unison', 2: '2nd', 3: '3rd', 4: '4th', 5: '5th', 6: '6th', 7: '7th', 8: 'Octave' }
 
 const QUALITIES = [
   { id: 'A', label: 'Augmented' },
@@ -16,18 +22,24 @@ const QUALITIES = [
 ]
 
 function combosFor(qualityId) {
-  if (qualityId === 'A') return INTERVAL_DEGREES.map((n) => ({ quality: 'A', number: n }))
-  if (qualityId === 'MP') return INTERVAL_DEGREES.map((n) => ({ quality: isPerfectFamily(n) ? 'P' : 'M', number: n }))
-  if (qualityId === 'm') return INTERVAL_DEGREES.filter((n) => !isPerfectFamily(n)).map((n) => ({ quality: 'm', number: n }))
-  return INTERVAL_DEGREES.map((n) => ({ quality: 'd', number: n })) // 'd'
+  if (qualityId === 'A') return NUMBERS.map((n) => ({ quality: 'A', number: n }))
+  if (qualityId === 'MP') return NUMBERS.map((n) => ({ quality: isPerfectFamily(n) ? 'P' : 'M', number: n }))
+  if (qualityId === 'm') return NUMBERS.filter((n) => !isPerfectFamily(n)).map((n) => ({ quality: 'm', number: n }))
+  return NUMBERS.filter((n) => n !== 1).map((n) => ({ quality: 'd', number: n })) // 'd' — diminished unison isn't a real interval
 }
 
 const ANSWER_ROWS = [
-  INTERVAL_DEGREES.map((n) => ({ label: `A${n}`, value: `A${n}` })),
-  INTERVAL_DEGREES.map((n) => ({ label: `${isPerfectFamily(n) ? 'P' : 'M'}${n}`, value: `${isPerfectFamily(n) ? 'P' : 'M'}${n}` })),
-  INTERVAL_DEGREES.map((n) => (isPerfectFamily(n) ? null : { label: `m${n}`, value: `m${n}` })),
-  INTERVAL_DEGREES.map((n) => ({ label: `d${n}`, value: `d${n}` }))
+  NUMBERS.map((n) => ({ label: `A${n}`, value: `A${n}` })),
+  NUMBERS.map((n) => ({ label: `${isPerfectFamily(n) ? 'P' : 'M'}${n}`, value: `${isPerfectFamily(n) ? 'P' : 'M'}${n}` })),
+  NUMBERS.map((n) => (isPerfectFamily(n) ? null : { label: `m${n}`, value: `m${n}` })),
+  NUMBERS.map((n) => (n === 1 ? null : { label: `d${n}`, value: `d${n}` }))
 ]
+
+// "Distance" mode ignores the spelled quality (M/m/P/A/d) entirely and just
+// asks for the generic interval number — how many letter-names apart the
+// two notes are, unison through octave — a simpler first skill than also
+// judging major/minor/perfect/etc.
+const DISTANCE_ROWS = [NUMBERS.map((n) => ({ label: NUMBER_LABELS[n], value: n }))]
 
 // All 12 roots, correctly spelled via CANONICAL_ROOTS (flats on the black
 // keys) so e.g. a Bb-rooted interval doesn't silently need a double
@@ -57,11 +69,30 @@ export default function IntervalIdentification() {
   const [qualities, setQualities] = useState(loadQualities)
   useEffect(() => { try { localStorage.setItem('identify:interval:qualities', JSON.stringify(qualities)) } catch (e) {} }, [qualities])
 
+  const loadDistanceMode = () => {
+    try { const raw = localStorage.getItem('identify:interval:distanceMode'); if (raw) return JSON.parse(raw) } catch (e) {}
+    return false
+  }
+  const [distanceMode, setDistanceMode] = useState(loadDistanceMode)
+  useEffect(() => { try { localStorage.setItem('identify:interval:distanceMode', JSON.stringify(distanceMode)) } catch (e) {} }, [distanceMode])
+
   const pool = useMemo(() => buildPool(QUALITIES.filter((q) => qualities[q.id]).map((q) => q.id)), [qualities])
+
+  // Reads the number straight off prompt.name (e.g. 'P8' -> 8) rather than
+  // re-deriving it from the two notes' letters — genericIntervalNumber can't
+  // tell a unison from an octave (or a 15th) since same-letter pairs are
+  // indistinguishable by letter alone; the pool already knows the real
+  // answer from how it built the prompt, no need to re-derive it.
+  const promptNumber = (prompt) => Number(prompt.name.slice(1))
 
   const { current, score, lastResult, submitAnswer, skip, resetScore } = useIdentifyExercise({
     pool,
-    isCorrect: (prompt, answer) => answer === prompt.name,
+    isCorrect: distanceMode
+      ? (prompt, answer) => answer === promptNumber(prompt)
+      : (prompt, answer) => answer === prompt.name,
+    // Same stats bucket regardless of mode — useIdentifyExercise only loads
+    // statsKey once on mount, so switching it live here would silently mix
+    // one mode's in-memory stats into the other's storage key on next save.
     statsKey: 'identify:interval:stats',
     promptKey: (p) => `${p.root.name}${p.root.midi}-${p.name}`
   })
@@ -79,7 +110,8 @@ export default function IntervalIdentification() {
 
   const cellState = (value) => {
     if (!lastResult) return null
-    if (current && value === current.name) return 'correct'
+    const correctValue = distanceMode ? (current && promptNumber(current)) : current && current.name
+    if (value === correctValue) return 'correct'
     if (value === lastResult.answer && !lastResult.correct) return 'wrong'
     return null
   }
@@ -97,6 +129,14 @@ export default function IntervalIdentification() {
             ))}
           </div>
         </div>
+        <div className="filter-block">
+          <div className="filter-title">Options</div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+            <button className={`play-cat-btn ${distanceMode ? 'active' : ''}`} onClick={() => setDistanceMode((v) => !v)} title="Ask for the generic interval number (unison-octave) instead of the spelled quality">
+              Distance Only
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="identify-header">Interval Identification</div>
@@ -111,7 +151,7 @@ export default function IntervalIdentification() {
           <div className="muted" style={{ textAlign: 'center', padding: '2rem' }}>No intervals available for the current options</div>
         )}
 
-        <AnswerGrid rows={ANSWER_ROWS} columns={7} onSelect={submitAnswer} cellState={cellState} disabled={!current || !!lastResult} />
+        <AnswerGrid rows={distanceMode ? DISTANCE_ROWS : ANSWER_ROWS} columns={8} onSelect={submitAnswer} cellState={cellState} disabled={!current || !!lastResult} />
 
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16, marginTop: 20 }}>
           <button className="primary-btn" onClick={skip} disabled={!current}>Skip</button>
