@@ -24,9 +24,9 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
     major: { label: 'Major', types: ['fifth','major','M7','M9','M11','M13'] },
     minor: { label: 'Minor', types: ['minor','m6','m7','m9','m11','m13'] },
     diminished: { label: 'Diminished', types: ['dim','dim7'] },
-    augmented: { label: 'Augmented', types: ['aug','9#5','11#5','13#5','m9#5','m7#5'] },
+    augmented: { label: 'Augmented', types: ['aug'] },
     suspended: { label: 'Suspended', types: ['sus2','sus4','7sus2','7sus4','9sus4'] },
-    flatRaised: { label: 'Flat/Raised', types: ['flat5','7b5','9b5','11b5','13b5','b9','mb9','m9b5'] },
+    flatRaised: { label: 'Flat/Raised', types: ['flat5','7b5','9b5','11b5','13b5','b9','mb9','m9b5','7#5','9#5','11#5','13#5','m7#5','m9#5'] },
     sixth: { label: '6th', types: ['6','m6','7/6','9/6','m9/6'] },
     seventh: { label: '7th', types: ['7','m7','dim7','M7','mM7','7b5','7#5','m7b5','m7#5','7sus2','7sus4','7/6'] },
     add9: { label: 'add9', types: ['add9','madd9'] },
@@ -207,9 +207,9 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
     '7sus2': ['seventh','suspended'],
     '7sus4': ['seventh','suspended'],
     '7b5': ['seventh','flatRaised'],
-    '7#5': ['seventh','augmented'],
+    '7#5': ['seventh','flatRaised'],
     'm7b5': ['minor','seventh','flatRaised'],
-    'm7#5': ['minor','seventh','augmented'],
+    'm7#5': ['minor','seventh','flatRaised'],
 
     'add9': ['add9','major'],
     'madd9': ['add9','minor'],
@@ -226,18 +226,18 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
     'm9': ['ninth','seventh','minor'],
     'b9': ['ninth','seventh','flatRaised'],
     'mb9': ['ninth','seventh','minor','flatRaised'],
-    '9#5': ['ninth','seventh','augmented'],
+    '9#5': ['ninth','seventh','flatRaised'],
     '9sus4': ['ninth','seventh','suspended'],
     '9b5': ['ninth','seventh','flatRaised'],
     'm9b5': ['ninth','seventh','minor','flatRaised'],
-    'm9#5': ['ninth','seventh','minor','augmented'],
+    'm9#5': ['ninth','seventh','minor','flatRaised'],
     'M9': ['major','ninth','seventh'],
 
     '11': ['eleventh'],
     'm11': ['eleventh','minor'],
     'M11': ['eleventh','major'],
     '11b5': ['eleventh','flatRaised'],
-    '11#5': ['eleventh','augmented'],
+    '11#5': ['eleventh','flatRaised'],
     '11M7': ['eleventh','major','seventh'],
     '11b9': ['eleventh','ninth','flatRaised'],
     '11#9': ['eleventh','ninth','augmented'],
@@ -246,7 +246,7 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
     'M13': ['major','thirteenth'],
     'm13': ['minor','thirteenth'],
     '13b5': ['thirteenth','flatRaised'],
-    '13#5': ['thirteenth','augmented']
+    '13#5': ['thirteenth','flatRaised']
   }), [])
 
   // templates filtered by settings
