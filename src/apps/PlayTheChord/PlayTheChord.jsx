@@ -70,8 +70,8 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
   useEffect(() => { try { localStorage.setItem('play:showNotes', JSON.stringify(showNotes)) } catch(e){} }, [showNotes])
 
   const loadHoldSeconds = () => {
-    try { const raw = localStorage.getItem('play:holdSeconds'); if (raw) return Number(raw) } catch(e){}
-    return 2
+    try { const raw = localStorage.getItem('play:holdSeconds'); if (raw !== null && raw !== undefined && raw !== '') return Number(raw) } catch(e){}
+    return 0
   }
   const [holdSeconds, setHoldSeconds] = useState(loadHoldSeconds)
   useEffect(() => { try { localStorage.setItem('play:holdSeconds', String(holdSeconds)) } catch(e){} }, [holdSeconds])
@@ -644,46 +644,63 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
 
     // If currently all present and no extras, start or continue hold timer
     if (allPresent && noExtras) {
-      if (!holdStartRef.current) {
-        holdStartRef.current = performance.now()
-      }
-      // start an interval to update progress (if not running)
-      if (!holdTimerRef.current) {
-        holdTimerRef.current = setInterval(() => {
-          const now = performance.now()
-          const elapsed = now - (holdStartRef.current || now)
-          const prog = Math.min(1, elapsed / (holdSeconds * 1000))
-          setHoldProgress(prog)
-          if (prog >= 1) {
-            // completed hold — register success
-            if (holdTimerRef.current) { clearInterval(holdTimerRef.current); holdTimerRef.current = null }
-            holdStartRef.current = null
-            setHoldProgress(1)
-            // commit solved behavior depending on roundActive
-            const rawElapsed = roundStartTs ? (performance.now() - roundStartTs) : 0
-            // subtract hold time (the required holdSeconds) from the recorded elapsed
-            const elapsedRound = Math.max(0, rawElapsed - (holdSeconds * 1000))
-            if (roundActive) {
-              setRoundActive(false)
-              setStatus('solved')
-              setScore(s => s + 1)
-              if (!roundCanceled) recordRound(current, !hadWrongRef.current, elapsedRound)
-              const pool = (allowedTemplates && allowedTemplates.length > 0) ? allowedTemplates : []
-              if (pool.length > 0) setPendingNext(pickDifferent(pool, current)); else setPendingNext(null)
-            } else {
-              // free-play: also record successes so user's plays appear in stats
-              const pool = (allowedTemplates && allowedTemplates.length > 0) ? allowedTemplates : []
-              setStatus('solved')
-              // record free-play results as well (recordRound will no-op if trackStats is false)
-              recordRound(current, !hadWrongRef.current, elapsedRound)
-              if (pool.length > 0) {
-                setPendingNext(pickDifferent(pool, current))
-              } else {
-                setPendingNext(null)
-              }
-            }
+      // commit solved behavior depending on roundActive — shared by both the
+      // instant (holdSeconds === 0) and timed-hold completion paths
+      const commitSolved = (elapsedRound) => {
+        if (roundActive) {
+          setRoundActive(false)
+          setStatus('solved')
+          setScore(s => s + 1)
+          if (!roundCanceled) recordRound(current, !hadWrongRef.current, elapsedRound)
+          const pool = (allowedTemplates && allowedTemplates.length > 0) ? allowedTemplates : []
+          if (pool.length > 0) setPendingNext(pickDifferent(pool, current)); else setPendingNext(null)
+        } else {
+          // free-play: also record successes so user's plays appear in stats
+          const pool = (allowedTemplates && allowedTemplates.length > 0) ? allowedTemplates : []
+          setStatus('solved')
+          // record free-play results as well (recordRound will no-op if trackStats is false)
+          recordRound(current, !hadWrongRef.current, elapsedRound)
+          if (pool.length > 0) {
+            setPendingNext(pickDifferent(pool, current))
+          } else {
+            setPendingNext(null)
           }
-        }, 60)
+        }
+      }
+
+      if (holdSeconds <= 0) {
+        // Instant — no hold required, register success on the same tick the
+        // correct keys land rather than waiting for a timer to catch up.
+        if (!holdStartRef.current) {
+          holdStartRef.current = performance.now()
+          setHoldProgress(1)
+          const rawElapsed = roundStartTs ? (performance.now() - roundStartTs) : 0
+          commitSolved(Math.max(0, rawElapsed))
+        }
+      } else {
+        if (!holdStartRef.current) {
+          holdStartRef.current = performance.now()
+        }
+        // start an interval to update progress (if not running)
+        if (!holdTimerRef.current) {
+          holdTimerRef.current = setInterval(() => {
+            const now = performance.now()
+            const elapsed = now - (holdStartRef.current || now)
+            const prog = Math.min(1, elapsed / (holdSeconds * 1000))
+            setHoldProgress(prog)
+            if (prog >= 1) {
+              // completed hold — register success
+              if (holdTimerRef.current) { clearInterval(holdTimerRef.current); holdTimerRef.current = null }
+              holdStartRef.current = null
+              setHoldProgress(1)
+              // commit solved behavior depending on roundActive
+              const rawElapsed = roundStartTs ? (performance.now() - roundStartTs) : 0
+              // subtract hold time (the required holdSeconds) from the recorded elapsed
+              const elapsedRound = Math.max(0, rawElapsed - (holdSeconds * 1000))
+              commitSolved(elapsedRound)
+            }
+          }, 60)
+        }
       }
     } else {
       // not holding correctly — reset hold
@@ -849,14 +866,18 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
               <div style={{display:'flex',gap:8,marginTop:6}}>
                 <button className={`play-cat-btn ${allowInversions ? 'active' : ''}`} onClick={() => setAllowInversions(v => !v)}>Allow Inversions</button>
                 <button className={`play-cat-btn ${showNotes ? 'active' : ''}`} onClick={() => setShowNotes(v => !v)}>Show Notes</button>
-                <div style={{display:'flex',alignItems:'center',gap:6,marginLeft:6}}>
-                  <label style={{fontSize:12,color:'var(--muted)'}}>Hold (s)</label>
-                  <select value={holdSeconds} onChange={e => setHoldSeconds(Number(e.target.value))} style={{background:'transparent',border:'1px solid rgba(255,255,255,0.04)',color:'var(--muted)',padding:'4px 6px',borderRadius:6}}>
-                    <option value={1}>1</option>
-                    <option value={2}>2</option>
-                    <option value={3}>3</option>
-                    <option value={5}>5</option>
-                  </select>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:6}}>
+                  <label style={{fontSize:12,color:'var(--muted)'}}>Hold</label>
+                  <input
+                    type="range"
+                    min={0}
+                    max={5}
+                    step={0.5}
+                    value={holdSeconds}
+                    onChange={e => setHoldSeconds(Number(e.target.value))}
+                    style={{width:110,accentColor:'var(--accent)'}}
+                  />
+                  <span style={{fontSize:12,color:'var(--muted)',minWidth:56}}>{holdSeconds <= 0 ? 'Instant' : `${holdSeconds}s`}</span>
                 </div>
               </div>
             </div>
