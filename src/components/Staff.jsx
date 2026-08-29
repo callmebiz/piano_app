@@ -8,19 +8,64 @@ import { Renderer, Stave, StaveNote, Voice, Formatter, Accidental, StaveConnecto
 // just a `notes` array of length 1 with 1/2/3+ keys, and a scale is a longer
 // sequence — no changes needed here to support any of those later.
 //
-// notes: [{ keys: ['c/4'], duration: 'w', clef: 'treble' }, ...] — `clef` on
-// a moment only matters when the component's own `clef` prop is 'grand'; it
-// picks which of the two staves that moment is drawn on (falls back to a
-// register-based guess — octave >= 4 is treble — if omitted).
+// notes: [{ keys: ['c/4'], duration: 'w', clef: 'treble', state: 'done'|'current' }, ...] —
+// `clef` on a moment only matters when the component's own `clef` prop is
+// 'grand'; it picks which of the two staves that moment is drawn on (falls
+// back to a register-based guess — octave >= 4 is treble — if omitted).
+// `state` is optional progress highlighting (e.g. a scale being played
+// through): 'done' colors the notehead like an already-played key, 'current'
+// like the next one expected; omitted/anything else uses the plain theme color.
 const DARK_COLOR = '#f5f7fa' // staff/notes in dark theme: white
 const LIGHT_COLOR = '#1a2332' // staff/notes in light theme: dark
+const DONE_COLOR = '#6ee7b7' // matches --accent — already-played notes
+const CURRENT_COLOR = '#ffd24a' // warm highlight — the next note expected
 const GRAND_STAVE_GAP = 120 // px between the treble/bass stave y-origins, before scale
+const MIN_AUTO_FIT_SCALE = 0.2
 
 function defaultClefFor(moment) {
   const k = moment.keys && moment.keys[0]
   if (!k) return 'treble'
   const octave = Number(k.split('/')[1])
   return octave >= 4 ? 'treble' : 'bass'
+}
+
+function buildStaveNote(moment, clefName) {
+  const sn = new StaveNote({ keys: moment.keys, duration: moment.duration || 'w', clef: clefName })
+  moment.keys.forEach((k, i) => {
+    if (k.includes('#')) sn.addModifier(new Accidental('#'), i)
+    else if (k.includes('b')) sn.addModifier(new Accidental('b'), i)
+  })
+  return sn
+}
+
+// VexFlow enforces a real minimum width per note (accidentals, noteheads,
+// spacing) and will NOT compress below it — asking it to fit into a width
+// that's too small just makes it silently render wider than requested and
+// overflow the container. Measure the true minimum width a run of notes
+// needs (at scale 1, via a detached/never-drawn context — VexFlow's
+// formatter math is font-metric-driven, not dependent on being on-screen)
+// so the caller can compute a scale that's *guaranteed* to fit instead of
+// guessing.
+function measureNaturalWidth(moments, clefName, keySignature) {
+  if (!moments || moments.length === 0) return 0
+  const measureDiv = document.createElement('div')
+  const renderer = new Renderer(measureDiv, Renderer.Backends.SVG)
+  renderer.resize(4000, 400)
+  const context = renderer.getContext()
+  const stave = new Stave(10, 20, 3900)
+  stave.addClef(clefName)
+  if (keySignature) stave.addKeySignature(keySignature)
+  stave.setContext(context)
+
+  const staveNotes = moments.map((m) => buildStaveNote(m, clefName))
+  const voice = new Voice({ numBeats: staveNotes.length * 4, beatValue: 4 })
+  voice.setStrict(false)
+  voice.addTickables(staveNotes)
+  const formatter = new Formatter()
+  formatter.joinVoices([voice])
+  const minNoteWidth = formatter.preCalculateMinTotalWidth([voice])
+  const clefWidth = stave.getNoteStartX() - stave.getX()
+  return clefWidth + minNoteWidth + 20 // + a little end padding
 }
 
 export default function Staff({ clef = 'treble', notes = [], keySignature, minHeight = 160, scale = 1 }) {
@@ -65,21 +110,33 @@ export default function Staff({ clef = 'treble', notes = [], keySignature, minHe
     el.innerHTML = ''
 
     try {
+      // For a single staff with actual notes, guarantee everything fits
+      // within `width` by shrinking scale below the caller's requested value
+      // if the natural (scale-1) content is too wide — never grows past it.
+      let effectiveScale = scale
+      if (!isGrand && notes && notes.length > 0) {
+        const naturalWidth = measureNaturalWidth(notes, clef, keySignature)
+        if (naturalWidth > 0) {
+          const fitScale = (width - 20) / naturalWidth
+          effectiveScale = Math.max(MIN_AUTO_FIT_SCALE, Math.min(scale, fitScale))
+        }
+      }
+
       // Scale up/down uniformly: keep the visible box the same size but lay
       // out and draw everything in a proportionally smaller/larger logical
       // space, so a higher scale reads as a bigger clef/staff/notehead
       // rather than a wider/taller box.
-      const height = (isGrand ? minHeight + GRAND_STAVE_GAP : minHeight) * scale
+      const height = (isGrand ? minHeight + GRAND_STAVE_GAP : minHeight) * effectiveScale
       const renderer = new Renderer(el, Renderer.Backends.SVG)
       renderer.resize(width, height)
       const context = renderer.getContext()
-      context.scale(scale, scale)
+      context.scale(effectiveScale, effectiveScale)
 
       const color = document.documentElement.classList.contains('light') ? LIGHT_COLOR : DARK_COLOR
       context.setFillStyle(color)
       context.setStrokeStyle(color)
 
-      const staveWidth = Math.max(120, (width - 20) / scale)
+      const staveWidth = Math.max(120, (width - 20) / effectiveScale)
 
       const drawStave = (x, y, clefName) => {
         const st = new Stave(x, y, staveWidth)
@@ -91,12 +148,9 @@ export default function Staff({ clef = 'treble', notes = [], keySignature, minHe
       }
 
       const makeNote = (moment, clefName) => {
-        const sn = new StaveNote({ keys: moment.keys, duration: moment.duration || 'w', clef: clefName })
-        sn.setStyle({ fillStyle: color, strokeStyle: color })
-        moment.keys.forEach((k, i) => {
-          if (k.includes('#')) sn.addModifier(new Accidental('#'), i)
-          else if (k.includes('b')) sn.addModifier(new Accidental('b'), i)
-        })
+        const sn = buildStaveNote(moment, clefName)
+        const noteColor = moment.state === 'done' ? DONE_COLOR : moment.state === 'current' ? CURRENT_COLOR : color
+        sn.setStyle({ fillStyle: noteColor, strokeStyle: noteColor })
         return sn
       }
 

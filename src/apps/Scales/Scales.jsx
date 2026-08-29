@@ -1,6 +1,13 @@
-import React, { useEffect, useMemo, useState, useRef } from 'react'
-import { SCALE_TYPES, scaleLongNames, buildScaleSequence, buildTwoHandSequence, buildDegreeLabels, scaleDisplayName, ROOTS, MAX_OCTAVES } from '../../lib/scales'
+import React, { useEffect, useMemo, useState, useRef, Suspense, lazy } from 'react'
+import { SCALE_TYPES, scaleLongNames, buildScaleSequence, buildTwoHandSequence, buildDegreeLabels, buildScaleSpelling, scaleDisplayName, ROOTS, MAX_OCTAVES } from '../../lib/scales'
 import useHoldToSkip from '../../hooks/useHoldToSkip'
+import { useStaffSettings } from '../../lib/staffSettings'
+
+// Staff.jsx pulls in VexFlow (~1.1MB) — Scales isn't lazy-loaded at the
+// App.jsx level (unlike Identify), so a plain top-level import here would
+// drag VexFlow into the main bundle every visitor downloads. Lazy-load just
+// this component instead.
+const Staff = lazy(() => import('../../components/Staff'))
 
 function randomInt(max) { return Math.floor(Math.random() * max) }
 
@@ -211,6 +218,19 @@ export default function Scales({ pressedNotes, setKeyboardTargetPCs = () => {} }
     return buildDegreeLabels(current.type, { octaves, descending })
   }, [current, descending, octaves])
 
+  // Correctly-spelled staff notation for the current run (same helper Scale
+  // Identification uses), highlighted in step with progress the same way the
+  // Degree/Note table below is — 'done' for already-played notes, 'current'
+  // for the next one expected.
+  const staffSettings = useStaffSettings()
+  const scaleSpelling = useMemo(() => {
+    if (!current) return null
+    return buildScaleSpelling(current.root, current.type, { octave: 4, octaves, descending })
+  }, [current, octaves, descending])
+  const staffNotes = scaleSpelling
+    ? scaleSpelling.map((n, i) => ({ keys: [n.vexKey], duration: 'w', state: i < stepIndex ? 'done' : i === stepIndex ? 'current' : undefined }))
+    : []
+
   // reset progress whenever a fresh attempt begins or the scale's shape changes
   const lastAdvancedStepRef = useRef(-1)
   useEffect(() => {
@@ -274,8 +294,13 @@ export default function Scales({ pressedNotes, setKeyboardTargetPCs = () => {} }
   }, [pressedNotes])
 
   // --- Single-hand sequence tracking: diff pressed notes across renders and
-  // advance stepIndex on each newly-attacked note that matches the next
-  // expected pitch class (any octave — register is flexible one-handed).
+  // advance stepIndex on each newly-attacked note. Only the very first note
+  // of a run is register-flexible (any octave of the root's pitch class —
+  // wherever the player chooses to start, which then re-anchors `sequence`
+  // via startAnchor); every note after that must be the exact note shown on
+  // the staff/table (same octave, same order), not just any octave of the
+  // right letter — otherwise a same-named note in the wrong register would
+  // silently "count" and the exercise could appear to skip or jump octaves.
   const prevPressedRef = useRef(new Set())
   const stepIndexRef = useRef(0)
   useEffect(() => { stepIndexRef.current = stepIndex }, [stepIndex])
@@ -294,14 +319,21 @@ export default function Scales({ pressedNotes, setKeyboardTargetPCs = () => {} }
       let wrong = false
       for (const n of added) {
         if (idx >= sequence.length) break
-        const expectedPc = orderedPcs[idx]
-        const pc = ((n % 12) + 12) % 12
-        if (pc === expectedPc) {
-          // first note of the run: lock in whichever octave the player actually started on
-          if (idx === 0 && startAnchorRef.current == null) {
+        if (idx === 0 && startAnchorRef.current == null) {
+          // first note of the run: register-flexible — lock in whichever
+          // octave the player actually started on and re-anchor the sequence
+          const expectedPc = orderedPcs[0]
+          const pc = ((n % 12) + 12) % 12
+          if (pc === expectedPc) {
             startAnchorRef.current = n
             setStartAnchor(n)
+            idx += 1
+          } else {
+            wrong = true
           }
+        } else if (n === sequence[idx]) {
+          // every note after the first must be the exact expected note
+          // (specific octave), not just any octave of the right letter
           idx += 1
         } else {
           wrong = true
@@ -555,6 +587,18 @@ export default function Scales({ pressedNotes, setKeyboardTargetPCs = () => {} }
                 </div>
               )}
             </div>
+
+            {/* Staff notation of the current run — same helper/component Scale
+                Identification uses, just a plain reference view */}
+            {scaleSpelling ? (
+              <div style={{ marginTop: 12 }}>
+                <Suspense fallback={<div className="muted" style={{ textAlign: 'center', padding: '1rem' }}>Loading staff…</div>}>
+                  <Staff clef="treble" notes={staffNotes} minHeight={160} scale={staffSettings.scale} />
+                </Suspense>
+              </div>
+            ) : current ? (
+              <div className="muted" style={{ textAlign: 'center', marginTop: 12 }}>Staff notation unavailable for this root/scale (would need a double sharp/flat)</div>
+            ) : null}
 
             {/* Degree/Note table showing the full sequence with progress */}
             <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12, overflowX: 'auto' }}>

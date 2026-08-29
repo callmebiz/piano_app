@@ -168,17 +168,51 @@ const SCALE_LETTER_STEPS = {
 }
 const LETTER_ORDER = ['C', 'D', 'E', 'F', 'G', 'A', 'B']
 
+// Extends one octave's worth of (semitone offset, letter step) pairs into a
+// full ascending walk across `octaves` repeats (mirroring buildAscendingPcs's
+// oct*n+1-note shape above, but keeping absolute — not mod-12/mod-7 wrapped —
+// values, since spelling needs real ascending octave/letter position, not a
+// wrapped pitch class).
+function extendScalePattern(type, octaves) {
+  const intervals = scaleFormulas[type]
+  const steps = SCALE_LETTER_STEPS[type]
+  if (!intervals || !steps) return null
+  const oct = clampOctaves(octaves)
+  const n = intervals.length
+
+  const outIntervals = [intervals[0]]
+  const outSteps = [steps[0]]
+  for (let o = 0; o < oct; o++) {
+    for (let idx = 1; idx < n; idx++) {
+      outIntervals.push(intervals[idx] + 12 * o)
+      outSteps.push(steps[idx] + 7 * o)
+    }
+    outIntervals.push(intervals[0] + 12 * (o + 1))
+    outSteps.push(steps[0] + 7 * (o + 1))
+  }
+  return { intervals: outIntervals, steps: outSteps }
+}
+
 // Correctly-spelled (proper accidentals, no letter reused where avoidable)
 // note sequence for a scale — unlike buildScaleSequence above, which is
 // pitch-class-only and fine for Scales practice (highlighting keyboard keys)
 // but would show e.g. F major's Bb as A# on a staff. Root is a pitch class
-// (0-11); returns one note per scaleFormulas[type] degree, ascending from
-// the given octave. Returns null if any degree would need a double sharp/flat.
+// (0-11); returns one note per degree, ascending from the given octave
+// (optionally repeated across `octaves` and mirrored back down if
+// `descending`, matching buildScaleSequence's own options). Returns null if
+// any degree would need a double sharp/flat.
 export function buildScaleSpelling(root, type, opts = {}) {
   const octave = opts.octave != null ? opts.octave : 4
-  const intervals = scaleFormulas[type]
-  const steps = SCALE_LETTER_STEPS[type]
-  if (!intervals || !steps) return null
+  const octaves = opts.octaves != null ? opts.octaves : 1
+  const descending = !!opts.descending
+
+  const pattern = extendScalePattern(type, octaves)
+  if (!pattern) return null
+  let { intervals, steps } = pattern
+  if (descending) {
+    intervals = intervals.concat(intervals.slice(0, -1).reverse())
+    steps = steps.concat(steps.slice(0, -1).reverse())
+  }
 
   const rootName = CANONICAL_ROOTS[((root % 12) + 12) % 12]
   const { letter: rootLetter, accidental: rootAccidental } = parseSpelling(rootName)
@@ -188,7 +222,7 @@ export function buildScaleSpelling(root, type, opts = {}) {
   const notes = []
   for (let i = 0; i < intervals.length; i++) {
     const step = steps[i]
-    const letterIdx = (rootLetterIdx + step) % 7
+    const letterIdx = ((rootLetterIdx + step) % 7 + 7) % 7
     const letter = LETTER_ORDER[letterIdx]
     const noteOctave = octave + Math.floor((rootLetterIdx + step) / 7)
     const naturalMidi = spellingMidi(letter, '', noteOctave)
