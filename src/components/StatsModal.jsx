@@ -3,6 +3,8 @@ import { getLifetimeStats, resetLifetimeStats, getDailyTrend, getStreak, getTran
 
 const TREND_DAYS = 14
 const COLLAPSED_ROWS = 8
+const TREND_LABEL_SPACE = 14 // headroom above the plot area for each bar's printed value
+const TREND_HEIGHT = 60 + TREND_LABEL_SPACE
 
 function withRates(r) {
   return { ...r, accuracy: r.attempts > 0 ? (r.correct / r.attempts) * 100 : 0, avgTimeMs: r.correct > 0 ? r.totalTimeMs / r.correct : null }
@@ -40,6 +42,69 @@ function Kpi({ label, value, sub }) {
   )
 }
 
+const selectStyle = {
+  background: 'rgba(255,255,255,0.04)', color: 'inherit', border: '1px solid rgba(255,255,255,0.1)',
+  borderRadius: 6, padding: '5px 8px', fontSize: 12, fontFamily: 'inherit', cursor: 'pointer'
+}
+
+// A vertical bar chart (Y-axis + gridlines, one tick per bar, value label
+// printed above each bar) — same visual language as the trend chart below,
+// used for the dropdown-filtered Chord-Type/Root breakdowns so picking e.g.
+// one root shows its chord types as an actual chart instead of another
+// stack of horizontal progress-bar rows.
+function BarChart({ bars, selectedKey, onBarClick, height = 120 }) {
+  if (bars.length === 0) return <div className="muted" style={{ padding: 8 }}>No data yet</div>
+  return (
+    <div style={{ display: 'flex', gap: 8 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', width: 28, height, flexShrink: 0, fontSize: 9, color: 'var(--muted)', opacity: 0.6, textAlign: 'right' }}>
+        <span>100%</span>
+        <span>50%</span>
+        <span>0%</span>
+      </div>
+      <div style={{ flex: 1, overflowX: 'auto', paddingBottom: 2 }}>
+        <div style={{ position: 'relative', height, minWidth: bars.length * 46 }}>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', pointerEvents: 'none' }}>
+            <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }} />
+            <div style={{ borderTop: '1px dashed rgba(255,255,255,0.08)' }} />
+            <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)' }} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: '100%', position: 'relative' }}>
+            {bars.map((b) => (
+              <div
+                key={b.key}
+                onClick={() => onBarClick(b.key)}
+                title={`${b.label}: ${Math.round(b.accuracy)}% (${b.correct}/${b.attempts})`}
+                style={{ flex: '0 0 40px', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', cursor: 'pointer' }}
+              >
+                <div style={{ fontSize: 9, color: 'var(--muted)', marginBottom: 2, whiteSpace: 'nowrap' }}>{Math.round(b.accuracy)}%</div>
+                <div style={{
+                  width: 22,
+                  height: `${Math.max(2, b.accuracy)}%`,
+                  background: accuracyColor(b.accuracy),
+                  borderRadius: '3px 3px 0 0',
+                  outline: selectedKey === b.key ? '2px solid var(--accent)' : 'none',
+                  outlineOffset: 1
+                }} />
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 6, minWidth: bars.length * 46, marginTop: 4 }}>
+          {bars.map((b) => (
+            <div key={b.key} style={{ flex: '0 0 40px', display: 'flex', justifyContent: 'center' }}>
+              <span style={{
+                fontSize: 9, color: 'var(--muted)', opacity: 0.75, whiteSpace: 'nowrap',
+                display: 'inline-block', transform: 'rotate(-38deg)', transformOrigin: 'top right', maxWidth: 70,
+                overflow: 'hidden', textOverflow: 'ellipsis'
+              }}>{b.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // Shared stats dashboard for every exercise app (Identify's 5 exercises,
 // Ear Training's 4, Play The Chord, Scales): headline KPI cards, a daily
 // accuracy trend, and a breakdown list. Buckets sharing a `dimension` (e.g.
@@ -60,6 +125,11 @@ export default function StatsModal({ exercise, title, open, onClose = () => {} }
   // each breakdown expands independently since they're all shown at once
   // now, not one-at-a-time behind a tab.
   const [expandedSections, setExpandedSections] = useState({})
+  // Keyed by dimension name — 'ALL' (the default) or a specific top-level
+  // row's key from that dimension (e.g. 'root:2'). Drives the two-dimension
+  // dropdown+chart breakdown: picking a specific Root narrows the Chord
+  // Type chart down to just that root's chords, and vice versa.
+  const [filters, setFilters] = useState({})
   // Bumped on Reset so the memoized reads below re-run against the cleared store.
   const [refreshSeq, setRefreshSeq] = useState(0)
 
@@ -83,9 +153,40 @@ export default function StatsModal({ exercise, title, open, onClose = () => {} }
   // instead of only whichever one happened to "win" a single-parent slot.
   const childrenOf = (key) => allRows.filter((r) => (Array.isArray(r.parent) ? r.parent.includes(key) : r.parent === key))
   const rowByKey = (key) => allRows.find((r) => r.key === key) || null
+  // Given a leaf that belongs under `excludeKey` (one of its parents), find
+  // its OTHER parent — e.g. a chord's root parent, given its type parent —
+  // without needing to know either dimension's key format. Used to label a
+  // chart bar with just the other dimension's own name (e.g. "Diminished
+  // 7th") instead of the leaf's full combined label (e.g. "C Diminished
+  // 7th"), which would needlessly repeat whatever the chart is already
+  // filtered to.
+  const otherParentKeyOf = (leaf, excludeKey) => (Array.isArray(leaf.parent) ? leaf.parent.find((p) => p !== excludeKey) : null) || null
+
+  // Exactly two dimensions (Play The Chord's Chord Type/Root, Scales' Scale
+  // Type/Root) get the dropdown + bar-chart breakdown below; anything else
+  // (no dimension split at all — Identify, Ear Training) keeps the plain
+  // flat list.
+  const useChartBreakdown = dimensions.length === 2
+
+  const filterFor = (dim) => filters[dim] || 'ALL'
+  const setFilterFor = (dim, key) => { setFilters((f) => ({ ...f, [dim]: key })); setSelectedKey(null) }
+
+  // Bars for `dim`'s chart: the OTHER dimension's own top-level rows when
+  // `dim` is unfiltered ("ALL"), or — once a specific value of `dim` is
+  // picked — that value's real children, each relabeled with just its
+  // other-dimension identity so the chart doesn't repeat the filter in
+  // every tick.
+  const chartBarsFor = (dim, otherDim) => {
+    const f = filterFor(dim)
+    if (f === 'ALL') return topRows.filter((r) => r.dimension === otherDim)
+    return childrenOf(f).map((leaf) => {
+      const other = rowByKey(otherParentKeyOf(leaf, f))
+      return { ...leaf, label: other ? other.label : leaf.label }
+    })
+  }
+
   // One section per dimension (Chord Type, Root, …), shown together rather
-  // than behind a tab switcher — or, when there's no dimension split at
-  // all (Identify, Ear Training), a single flat section.
+  // than behind a tab switcher — used only for the flat (no chart) case.
   const sections = dimensions.length > 0
     ? dimensions.map((d) => ({ id: d, title: d, rows: topRows.filter((r) => r.dimension === d) }))
     : [{ id: 'flat', title: null, rows: topRows }]
@@ -193,20 +294,25 @@ export default function StatsModal({ exercise, title, open, onClose = () => {} }
         <div style={{ display: 'flex', gap: 8 }}>
           {/* Y-axis — without it, a chart of mostly-empty days (no attempts
               that day) reads as ambiguous: is a tall bar 100% or just "some"? */}
-          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', width: 28, height: 60, flexShrink: 0, fontSize: 9, color: 'var(--muted)', opacity: 0.6, textAlign: 'right' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', width: 28, height: TREND_HEIGHT, paddingTop: TREND_LABEL_SPACE, flexShrink: 0, fontSize: 9, color: 'var(--muted)', opacity: 0.6, textAlign: 'right' }}>
             <span>100%</span>
             <span>50%</span>
             <span>0%</span>
           </div>
-          <div style={{ flex: 1, position: 'relative', height: 60 }}>
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', pointerEvents: 'none' }}>
+          <div style={{ flex: 1, position: 'relative', height: TREND_HEIGHT }}>
+            <div style={{ position: 'absolute', top: TREND_LABEL_SPACE, left: 0, right: 0, bottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', pointerEvents: 'none' }}>
               <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }} />
               <div style={{ borderTop: '1px dashed rgba(255,255,255,0.08)' }} />
               <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)' }} />
             </div>
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: '100%', position: 'relative' }}>
               {trend.map((t) => (
-                <div key={t.date} title={`${t.date}: ${t.attempts} attempt${t.attempts === 1 ? '' : 's'}${t.accuracy != null ? `, ${Math.round(t.accuracy)}%` : ''}`} style={{ flex: 1, height: '100%', display: 'flex', alignItems: 'flex-end' }}>
+                <div key={t.date} title={`${t.date}: ${t.attempts} attempt${t.attempts === 1 ? '' : 's'}${t.accuracy != null ? `, ${Math.round(t.accuracy)}%` : ''}`} style={{ flex: 1, height: `calc(100% - ${TREND_LABEL_SPACE}px)`, display: 'flex', alignItems: 'flex-end', position: 'relative' }}>
+                  {t.attempts > 0 && (
+                    <div style={{ position: 'absolute', bottom: `calc(${Math.max(6, t.accuracy)}% + 2px)`, left: '50%', transform: 'translateX(-50%)', fontSize: 8, color: 'var(--muted)', opacity: 0.8, whiteSpace: 'nowrap' }}>
+                      {Math.round(t.accuracy)}%
+                    </div>
+                  )}
                   <div style={{
                     width: '100%',
                     height: t.attempts === 0 ? '2px' : `${Math.max(6, t.accuracy)}%`,
@@ -225,37 +331,72 @@ export default function StatsModal({ exercise, title, open, onClose = () => {} }
         </div>
       </div>
 
-      {/* Breakdown — every dimension (Chord Type, Root, …) shown as its own
-          section at once, instead of switching between them one at a time. */}
-      {sections.map((sec) => {
-        const sorted = sortRows(sec.rows, sortKey, sortDir)
-        const expanded = isExpanded(sec.id)
-        const visible = expanded ? sorted : sorted.slice(0, COLLAPSED_ROWS)
-        return (
-          <div key={sec.id} style={{ marginBottom: 24 }}>
-            {sec.title && <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>{sec.title}</div>}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 8px', marginBottom: 4, fontSize: 11, color: 'var(--muted)' }}>
-              <div style={{ width: 12 }} />
-              <button className={`sortable-header ${sortKey === 'label' ? 'active' : ''}`} onClick={() => toggleSort('label')} style={headerBtnStyle(130)}>Item {sortIndicator('label')}</button>
-              <button className={`sortable-header ${sortKey === 'accuracy' ? 'active' : ''}`} onClick={() => toggleSort('accuracy')} style={{ ...headerBtnStyle(null), flex: 1 }}>Accuracy {sortIndicator('accuracy')}</button>
-              <div style={{ width: 82 }} />
-              <button className={`sortable-header ${sortKey === 'avgTimeMs' ? 'active' : ''}`} onClick={() => toggleSort('avgTimeMs')} style={headerBtnStyle(60)}>Speed {sortIndicator('avgTimeMs')}</button>
+      {/* Breakdown — for a two-dimension exercise (Play The Chord, Scales),
+          one dropdown + bar chart per dimension: pick a specific Root and
+          the Chord Type chart narrows to just that root's chords (relabeled
+          by type alone), and vice versa — instead of a tab, and instead of
+          drilling a row into another stack of horizontal bars. Anything
+          else (Identify, Ear Training — no dimension split) keeps the
+          plain flat list. */}
+      {useChartBreakdown ? (
+        dimensions.map((dim, i) => {
+          const otherDim = dimensions[1 - i]
+          const f = filterFor(dim)
+          const bars = sortRows(chartBarsFor(dim, otherDim), sortKey, sortDir)
+          const chartSelected = bars.some((b) => b.key === selectedKey) ? selectedKey : null
+          return (
+            <div key={dim} style={{ marginBottom: 24 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+                <div style={{ fontSize: 13, fontWeight: 700 }}>{otherDim} <span style={{ fontWeight: 400, color: 'var(--muted)', opacity: 0.7 }}>by {dim.toLowerCase()}</span></div>
+                <select value={f} onChange={(e) => setFilterFor(dim, e.target.value)} style={selectStyle}>
+                  <option value="ALL">All {dim}</option>
+                  {sortRows(topRows.filter((r) => r.dimension === dim), 'label', 'asc').map((r) => (
+                    <option key={r.key} value={r.key}>{r.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ display: 'flex', gap: 10, marginBottom: 6, fontSize: 11, color: 'var(--muted)' }}>
+                <span>Sort:</span>
+                <button className={`sortable-header ${sortKey === 'label' ? 'active' : ''}`} onClick={() => toggleSort('label')} style={headerBtnStyle(null)}>Name {sortIndicator('label')}</button>
+                <button className={`sortable-header ${sortKey === 'accuracy' ? 'active' : ''}`} onClick={() => toggleSort('accuracy')} style={headerBtnStyle(null)}>Accuracy {sortIndicator('accuracy')}</button>
+                <button className={`sortable-header ${sortKey === 'avgTimeMs' ? 'active' : ''}`} onClick={() => toggleSort('avgTimeMs')} style={headerBtnStyle(null)}>Speed {sortIndicator('avgTimeMs')}</button>
+              </div>
+              <BarChart bars={bars} selectedKey={chartSelected} onBarClick={selectRow} />
+              {chartSelected && childrenOf(chartSelected).length === 0 && transitionsPanel(chartSelected)}
             </div>
+          )
+        })
+      ) : (
+        sections.map((sec) => {
+          const sorted = sortRows(sec.rows, sortKey, sortDir)
+          const expanded = isExpanded(sec.id)
+          const visible = expanded ? sorted : sorted.slice(0, COLLAPSED_ROWS)
+          return (
+            <div key={sec.id} style={{ marginBottom: 24 }}>
+              {sec.title && <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>{sec.title}</div>}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 8px', marginBottom: 4, fontSize: 11, color: 'var(--muted)' }}>
+                <div style={{ width: 12 }} />
+                <button className={`sortable-header ${sortKey === 'label' ? 'active' : ''}`} onClick={() => toggleSort('label')} style={headerBtnStyle(130)}>Item {sortIndicator('label')}</button>
+                <button className={`sortable-header ${sortKey === 'accuracy' ? 'active' : ''}`} onClick={() => toggleSort('accuracy')} style={{ ...headerBtnStyle(null), flex: 1 }}>Accuracy {sortIndicator('accuracy')}</button>
+                <div style={{ width: 82 }} />
+                <button className={`sortable-header ${sortKey === 'avgTimeMs' ? 'active' : ''}`} onClick={() => toggleSort('avgTimeMs')} style={headerBtnStyle(60)}>Speed {sortIndicator('avgTimeMs')}</button>
+              </div>
 
-            {sorted.length === 0 ? (
-              <div className="muted" style={{ padding: 8 }}>No data yet</div>
-            ) : (
-              <div>{visible.map((r) => renderRow(r, 0))}</div>
-            )}
+              {sorted.length === 0 ? (
+                <div className="muted" style={{ padding: 8 }}>No data yet</div>
+              ) : (
+                <div>{visible.map((r) => renderRow(r, 0))}</div>
+              )}
 
-            {sorted.length > COLLAPSED_ROWS && (
-              <button className="play-cat-btn" style={{ marginTop: 8 }} onClick={() => toggleExpanded(sec.id)}>
-                {expanded ? 'Show less' : `Show all ${sorted.length}`}
-              </button>
-            )}
-          </div>
-        )
-      })}
+              {sorted.length > COLLAPSED_ROWS && (
+                <button className="play-cat-btn" style={{ marginTop: 8 }} onClick={() => toggleExpanded(sec.id)}>
+                  {expanded ? 'Show less' : `Show all ${sorted.length}`}
+                </button>
+              )}
+            </div>
+          )
+        })
+      )}
     </div>
   )
 }
