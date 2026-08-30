@@ -1,12 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import AnswerGrid from '../Identify/AnswerGrid'
 import useIdentifyExercise from '../Identify/useIdentifyExercise'
-import { buildScaleSpelling, SCALE_TYPES, scaleLongNames, ROOTS } from '../../lib/scales'
+import PlaybackBar from '../../components/PlaybackBar'
+import { buildScaleSpelling, scaleLongNames, ROOTS } from '../../lib/scales'
 import { playChord } from '../../audio/engine'
 import StatsModal from '../../components/StatsModal'
 
-// Same pool as Scale Identification, played as an ascending run through the
-// speaker instead of shown on a staff.
+// Major/minor family plus the 7 church modes — pentatonic/blues are left
+// out of ear training specifically (they're not part of this listen-and-
+// name set); Scales practice and Scale Identification still offer them.
+const TYPES = ['major', 'natMinor', 'harMinor', 'melMinor', 'ionian', 'dorian', 'phrygian', 'lydian', 'mixolydian', 'aeolian', 'locrian']
+
 function buildPool(enabledTypes) {
   const items = []
   for (let root = 0; root < 12; root++) {
@@ -21,27 +25,27 @@ function buildPool(enabledTypes) {
 
 const ANSWER_ROWS = (() => {
   const rows = []
-  for (let i = 0; i < SCALE_TYPES.length; i += 2) {
-    const a = SCALE_TYPES[i]
-    const b = SCALE_TYPES[i + 1]
+  for (let i = 0; i < TYPES.length; i += 2) {
+    const a = TYPES[i]
+    const b = TYPES[i + 1]
     rows.push([{ label: scaleLongNames[a], value: a }, b ? { label: scaleLongNames[b], value: b } : null])
   }
   return rows
 })()
 
-const DEFAULT_TYPES = { major: true, natMinor: true, harMinor: false, melMinor: false, majPent: true, minPent: true, blues: false }
+const DEFAULT_TYPES = Object.fromEntries(TYPES.map((t) => [t, true]))
 
 export default function ScaleEarTraining() {
   const loadTypes = () => {
-    try { const raw = localStorage.getItem('ear:scale:types'); if (raw) return JSON.parse(raw) } catch (e) {}
+    try { const raw = localStorage.getItem('ear:scale:types2'); if (raw) return JSON.parse(raw) } catch (e) {}
     return DEFAULT_TYPES
   }
   const [types, setTypes] = useState(loadTypes)
-  useEffect(() => { try { localStorage.setItem('ear:scale:types', JSON.stringify(types)) } catch (e) {} }, [types])
-  const selectAll = () => setTypes(Object.fromEntries(SCALE_TYPES.map((t) => [t, true])))
-  const clearAll = () => setTypes(Object.fromEntries(SCALE_TYPES.map((t) => [t, false])))
+  useEffect(() => { try { localStorage.setItem('ear:scale:types2', JSON.stringify(types)) } catch (e) {} }, [types])
+  const selectAll = () => setTypes(Object.fromEntries(TYPES.map((t) => [t, true])))
+  const clearAll = () => setTypes(Object.fromEntries(TYPES.map((t) => [t, false])))
 
-  const pool = useMemo(() => buildPool(SCALE_TYPES.filter((t) => types[t])), [types])
+  const pool = useMemo(() => buildPool(TYPES.filter((t) => types[t])), [types])
 
   const [showStats, setShowStats] = useState(false)
 
@@ -88,7 +92,7 @@ export default function ScaleEarTraining() {
             <button className="play-cat-btn" onClick={clearAll}>Clear All</button>
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {SCALE_TYPES.map((t) => (
+            {TYPES.map((t) => (
               <button key={t} className={`play-cat-btn ${types[t] ? 'active' : ''}`} onClick={() => setTypes((s) => ({ ...s, [t]: !s[t] }))}>
                 {scaleLongNames[t]}
               </button>
@@ -100,14 +104,9 @@ export default function ScaleEarTraining() {
       <div className="identify-header">Scale Ear Training</div>
       <div className="identify-card">
         {current ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '2rem 0' }}>
-            <button className="primary-btn" onClick={play} style={{ fontSize: 20, padding: '16px 32px' }}>▶ Play</button>
-            {lastResult && (
-              <div style={{ marginTop: 16, fontSize: 15, color: 'var(--muted)' }}>
-                That was <strong style={{ color: 'var(--accent)' }}>{ROOTS[current.root]} {scaleLongNames[current.name]}</strong>
-              </div>
-            )}
-          </div>
+          <>
+            <PlaybackBar onPlay={play} durationMs={current.midis.length * 260} revealText={lastResult ? `${ROOTS[current.root]} ${scaleLongNames[current.name]}` : null} />
+          </>
         ) : (
           <div className="muted" style={{ textAlign: 'center', padding: '2rem' }}>No scales available for the current options</div>
         )}

@@ -135,7 +135,7 @@ export default function App() {
                 )}
                 {selectedApp === 'eartraining' && (
                   <Suspense fallback={<div className="muted" style={{ padding: '2rem' }}>Loading…</div>}>
-                    <EarTraining />
+                    <EarTraining pressedNotes={pressed} />
                   </Suspense>
                 )}
                 {!selectedApp && (
