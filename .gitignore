@@ -49,6 +49,9 @@ Thumbs.db
 # Optional local dev files
 .localhistory/
 
+# Personal working notes, not part of the app
+/.notes/
+
 # Ignore generated node REPL history
 .node_repl_history
 
