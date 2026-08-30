@@ -1,17 +1,18 @@
 # Piano App
 
-A piano practice/theory web app: a visual 88-key keyboard driven by Web MIDI (or click/touch), and six apps built around it.
+A piano practice/theory web app: a visual 88-key keyboard driven by Web MIDI (or click/touch), and seven apps built around it.
 
 ## Apps
 
 - **Identification** — quiz-style ID practice: Note, Key Signature, Interval, Scale, and Chord ID, each with its own options (clef, accidentals, distance-only intervals, etc.) and a Stats view (accuracy, speed, drill-down, streaks).
+- **Ear Training** — quiz-style ID practice by ear instead of by eye: Note (played against a fixed middle-C reference, answered by letter button or by pressing the key itself), Interval, Chord, and Scale recognition, each with a Stats view. Nothing auto-plays — press Space or a bar's speaker icon to hear a prompt.
 - **Chord Recognition** — live "what am I playing" — shows the best-matching chord for whatever's currently held down, plus alternative interpretations.
 - **Play The Chord** — practice striking a shown chord correctly: adjustable hold-time, inversions, chord-type/root filters, and Stats.
 - **Scales** — practice scale runs in order (1-4 octaves, ascending/descending, one or two hands), with the scale shown on a staff that lights up as you play it, and Stats.
 - **Key Center** — diatonic chords plus every non-diatonic strand from *creative_chord_choices.txt*: secondary dominants, modal interchange, ii-V's, tritone subs, diminished approach chords, and V-chord alternatives. Generates example chord progressions and plays them back.
 - **Visualizer** — piano-roll-style bars that travel up from whichever keys you play.
 
-Stats (Identification, Play The Chord, Scales) share one engine (`src/lib/practiceStats.js`): lifetime accuracy/speed per item, a 14-day trend, streaks, drill-down (e.g. a chord root's specific chord-type breakdown), and transition timing (how fast/accurate one specific item goes right after another).
+Stats (Identification, Ear Training, Play The Chord, Scales) share one engine (`src/lib/practiceStats.js`): lifetime accuracy/speed per item, a 14-day trend, streaks, drill-down (e.g. a chord root's specific chord-type breakdown), and transition timing (how fast/accurate one specific item goes right after another).
 
 Light / Dark theme toggle, a resizable docked keyboard, and a Settings panel (master volume/mute, key width, per-app options like staff size or visualizer color).
 
