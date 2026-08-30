@@ -504,8 +504,8 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
     recordAttempt({
       exercise: 'play',
       buckets: [
-        { key: `type:${t}`, label: fm.longName },
-        { key: `root:${r}`, label: ROOTS[r] },
+        { key: `type:${t}`, label: fm.longName, dimension: 'Chord Type' },
+        { key: `root:${r}`, label: ROOTS[r], dimension: 'Root' },
         { key: chordKey, label: fm.displayName, parent: `root:${r}` }
       ],
       correct,

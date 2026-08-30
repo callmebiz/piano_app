@@ -104,24 +104,31 @@ function pruneEvents(list) {
   return pruned
 }
 
-// buckets: [{ key, label, parent? }] — every bucket this one attempt counts
-// toward. correct: boolean. timeMs: number|null (null if untimed).
-// primaryKey (optional): which of those bucket keys is "the specific item"
-// — used as this attempt's transition target. fromKey (optional): the
-// primaryKey of whatever attempt immediately preceded this one; when both
-// are given, a fromKey→primaryKey transition bucket is recorded too.
+// buckets: [{ key, label, parent?, dimension? }] — every bucket this one
+// attempt counts toward. correct: boolean. timeMs: number|null (null if
+// untimed). `dimension` (optional) groups top-level (no-parent) buckets
+// into independent breakdowns for display — e.g. Play The Chord tags one
+// bucket per attempt "Root" and another "Chord Type", so a UI can show
+// them as separate, non-conflated lists instead of one mixed one. Buckets
+// with no dimension (e.g. Identify's single per-prompt bucket) form one
+// implicit group. primaryKey (optional): which of those bucket keys is
+// "the specific item" — used as this attempt's transition target. fromKey
+// (optional): the primaryKey of whatever attempt immediately preceded this
+// one; when both are given, a fromKey→primaryKey transition bucket is
+// recorded too.
 export function recordAttempt({ exercise, buckets, correct, timeMs, primaryKey, fromKey }) {
   if (!exercise || !Array.isArray(buckets) || buckets.length === 0) return
 
   store.lifetime[exercise] = store.lifetime[exercise] || {}
-  for (const { key, label, parent } of buckets) {
+  for (const { key, label, parent, dimension } of buckets) {
     if (!key) continue
-    const bucket = store.lifetime[exercise][key] || { attempts: 0, correct: 0, totalTimeMs: 0, label: label || key, parent: parent || null }
+    const bucket = store.lifetime[exercise][key] || { attempts: 0, correct: 0, totalTimeMs: 0, label: label || key, parent: parent || null, dimension: dimension || null }
     bucket.attempts += 1
     if (correct) bucket.correct += 1
     if (correct && typeof timeMs === 'number' && timeMs >= 0) bucket.totalTimeMs += timeMs
     if (label) bucket.label = label
     if (parent) bucket.parent = parent
+    if (dimension) bucket.dimension = dimension
     store.lifetime[exercise][key] = bucket
   }
 
@@ -184,6 +191,22 @@ export function resetLifetimeStats(exercise) {
 
 export function getEvents(exercise) {
   return (store.events[exercise] || []).slice()
+}
+
+// Exercise-wide totals from the retained event log (not the never-pruned
+// lifetime buckets) — the same "how many/how accurate/how fast, overall"
+// numbers a dashboard's headline KPIs want, bounded by the same retention
+// window as trend/streaks so all three stay consistent with each other.
+export function getOverallStats(exercise) {
+  const events = getEvents(exercise)
+  const correct = events.filter((e) => e.correct)
+  const timed = correct.filter((e) => typeof e.timeMs === 'number')
+  return {
+    attempts: events.length,
+    correct: correct.length,
+    accuracy: events.length > 0 ? (correct.length / events.length) * 100 : 0,
+    avgTimeMs: timed.length > 0 ? timed.reduce((sum, e) => sum + e.timeMs, 0) / timed.length : null
+  }
 }
 
 const dayKey = (ts) => {

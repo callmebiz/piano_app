@@ -466,14 +466,3 @@ html,body{height:100%;}
 .stats-modal .stats-table td{white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
 .stats-modal .muted{color:var(--muted)}
 .stats-modal .close-btn{position:absolute;right:24px;top:18px;background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted);padding:6px 8px;border-radius:6px;cursor:pointer}
-
-/* Shared StatsModal (components/StatsModal.jsx) — 5-column table, distinct
-   widths from the 7-column layout above. Two classes on the table element
-   beat the single-class rules above regardless of source order. */
-.stats-modal .stats-table.practice-table{table-layout:auto}
-.stats-modal .stats-table.practice-table thead th:nth-child(1){width:38%}
-.stats-modal .stats-table.practice-table thead th:nth-child(2){width:20%}
-.stats-modal .stats-table.practice-table thead th:nth-child(3){width:14%}
-.stats-modal .stats-table.practice-table thead th:nth-child(4){width:14%}
-.stats-modal .stats-table.practice-table thead th:nth-child(5){width:14%}
-.stats-modal .stats-table.practice-table td{white-space:normal}
