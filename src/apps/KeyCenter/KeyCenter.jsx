@@ -114,12 +114,19 @@ export default function KeyCenter({ pressedNotes, setKeyboardTargetPCs = () => {
   // above, then playable back-to-back through the synth.
   const [progression, setProgression] = useState(null)
   const [isPlayingProgression, setIsPlayingProgression] = useState(false)
+  // Which single chip in the progression is currently sounding, by position
+  // (bar index, chord-within-bar index) — not by root/type. Two bars can
+  // legitimately hold the same chord (e.g. two "C"s in one progression), and
+  // isActive's root/type match would light up every one of them at once;
+  // this tracks the one specific instance actually playing right now.
+  const [playingPos, setPlayingPos] = useState(null)
   const playbackTimersRef = useRef([])
 
   const stopProgressionPlayback = () => {
     playbackTimersRef.current.forEach((id) => clearTimeout(id))
     playbackTimersRef.current = []
     setIsPlayingProgression(false)
+    setPlayingPos(null)
   }
   useEffect(() => () => stopProgressionPlayback(), []) // clear any pending timers on unmount
   useEffect(() => { setProgression(null); stopProgressionPlayback() }, [keyRoot]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -140,18 +147,19 @@ export default function KeyCenter({ pressedNotes, setKeyboardTargetPCs = () => {
   const playProgression = () => {
     if (!progression || progression.length === 0) return
     stopProgressionPlayback()
-    const flat = progression.flat()
+    const flat = progression.flatMap((bar, bi) => bar.map((c, ci) => ({ ...c, bi, ci })))
     const stepMs = 900
     const chordDurMs = 750
     setIsPlayingProgression(true)
     flat.forEach((c, i) => {
       const id = setTimeout(() => {
         setActiveChip({ root: c.root, type: c.type, label: c.label })
+        setPlayingPos({ bi: c.bi, ci: c.ci })
         playChord(voiceChordNearMiddleC(c.root, c.type), chordDurMs)
       }, i * stepMs)
       playbackTimersRef.current.push(id)
     })
-    const endId = setTimeout(() => { setIsPlayingProgression(false); setActiveChip(null) }, flat.length * stepMs)
+    const endId = setTimeout(() => { setIsPlayingProgression(false); setActiveChip(null); setPlayingPos(null) }, flat.length * stepMs)
     playbackTimersRef.current.push(endId)
   }
 
@@ -269,9 +277,25 @@ export default function KeyCenter({ pressedNotes, setKeyboardTargetPCs = () => {
                   <React.Fragment key={`bar-${bi}`}>
                     <div style={{ color: 'var(--muted)', fontSize: 22, opacity: 0.35 }}>|</div>
                     <div style={{ display: 'flex', gap: 4 }}>
-                      {bar.map((c, ci) => (
-                        <div key={`bc-${bi}-${ci}`}>{renderChip(c.root, c.type, c.label, { small: true })}</div>
-                      ))}
+                      {bar.map((c, ci) => {
+                        // During playback, highlight only the exact chip
+                        // currently sounding (by position) — not every chip
+                        // elsewhere in the progression that happens to share
+                        // the same root/type.
+                        const active = isPlayingProgression
+                          ? (playingPos && playingPos.bi === bi && playingPos.ci === ci)
+                          : isActive(c.root, c.type)
+                        return (
+                          <ChordChip
+                            key={`bc-${bi}-${ci}`}
+                            active={!!active}
+                            small
+                            label={c.label}
+                            displayName={chipLabel(c.root, c.type)}
+                            onClick={() => onChipClick(c.root, c.type, c.label)}
+                          />
+                        )
+                      })}
                     </div>
                   </React.Fragment>
                 ))}
