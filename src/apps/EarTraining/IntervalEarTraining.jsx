@@ -70,10 +70,21 @@ export default function IntervalEarTraining() {
     }
   }
 
+  // Space plays/replays the current prompt — no auto-play on a fresh
+  // prompt or on first load, only an explicit press (spacebar or the
+  // PlaybackBar's own speaker icon).
   useEffect(() => {
-    if (current) play()
+    const handler = (e) => {
+      if (e.code !== 'Space') return
+      const tgt = e.target
+      if (tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA' || tgt.isContentEditable)) return
+      e.preventDefault()
+      play()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current])
+  }, [current, harmonic])
 
   const cellState = (value) => {
     if (!lastResult) return null
@@ -94,6 +105,7 @@ export default function IntervalEarTraining() {
       </div>
 
       <div className="identify-header">Interval Ear Training</div>
+      <div className="muted" style={{ textAlign: 'center', fontSize: 12, marginBottom: 8 }}>Press Space or 🔊 to play</div>
       <div className="identify-card">
         {current && <PlaybackBar onPlay={play} durationMs={harmonic ? 1100 : 1300} revealText={lastResult ? current.name : null} />}
 

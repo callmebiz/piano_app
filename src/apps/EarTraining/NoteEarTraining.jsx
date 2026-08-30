@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import AnswerGrid from '../Identify/AnswerGrid'
 import useIdentifyExercise from '../Identify/useIdentifyExercise'
 import PlaybackBar from '../../components/PlaybackBar'
@@ -48,11 +48,29 @@ export default function NoteEarTraining() {
   const playQuestion = () => { if (current) playChord([current.midi], 800) }
   const playReference = () => playChord([REFERENCE_MIDI], 800)
 
-  useEffect(() => {
+  // Space plays/replays the full prompt (question then reference, same
+  // pairing as before) — no auto-play on a fresh prompt or on first load,
+  // only an explicit press (spacebar) or clicking a bar's own speaker icon
+  // (which plays just that one note).
+  const pendingRef = useRef(null)
+  const playBoth = () => {
     if (!current) return
+    if (pendingRef.current) clearTimeout(pendingRef.current)
     playQuestion()
-    const t = setTimeout(playReference, 950)
-    return () => clearTimeout(t)
+    pendingRef.current = setTimeout(playReference, 950)
+  }
+  useEffect(() => () => { if (pendingRef.current) clearTimeout(pendingRef.current) }, [])
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.code !== 'Space') return
+      const tgt = e.target
+      if (tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA' || tgt.isContentEditable)) return
+      e.preventDefault()
+      playBoth()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current])
 
@@ -66,10 +84,11 @@ export default function NoteEarTraining() {
   return (
     <div>
       <div className="identify-header">Note Ear Training</div>
+      <div className="muted" style={{ textAlign: 'center', fontSize: 12, marginBottom: 8 }}>Press Space or 🔊 to play</div>
       <div className="identify-card">
         {current ? (
           <>
-            <PlaybackBar label="Question Note" onPlay={playQuestion} durationMs={800} revealText={lastResult ? current.name : null} />
+            <PlaybackBar label="Question Note" onPlay={playBoth} durationMs={800} revealText={lastResult ? current.name : null} />
             <PlaybackBar label="Reference Note" onPlay={playReference} durationMs={800} revealText="C" />
           </>
         ) : (
