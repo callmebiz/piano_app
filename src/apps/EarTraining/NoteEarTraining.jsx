@@ -32,7 +32,13 @@ export const NOTE_ANSWER_ROWS = [
   [{ label: 'A', value: 'A' }, null, { label: 'B', value: 'B' }]
 ]
 
-export default function NoteEarTraining() {
+// Answered either via the letter-name grid or by pressing the actual key on
+// the app's own keyboard below — both fire the same submitAnswer, matching
+// how Note Identification already supports both. A pressed key resolves to
+// its pitch class rather than requiring the exact octave, same precision
+// as the button grid; a black-key press (no natural-letter equivalent in
+// this pool) is just ignored rather than counted as a wrong answer.
+export default function NoteEarTraining({ pressedNotes }) {
   const pool = useMemo(() => buildNotePool(), [])
 
   const [showStats, setShowStats] = useState(false)
@@ -45,34 +51,44 @@ export default function NoteEarTraining() {
     promptLabel: (p) => p.name
   })
 
+  // Each bar plays only its own single note — no chaining. Playing the
+  // Question note right into the Reference note reads as a two-note
+  // interval, which isn't what this exercise is (a single pitch, judged
+  // against an anchor you can check independently, not a melodic phrase).
   const playQuestion = () => { if (current) playChord([current.midi], 800) }
   const playReference = () => playChord([REFERENCE_MIDI], 800)
 
-  // Space plays/replays the full prompt (question then reference, same
-  // pairing as before) — no auto-play on a fresh prompt or on first load,
-  // only an explicit press (spacebar) or clicking a bar's own speaker icon
-  // (which plays just that one note).
-  const pendingRef = useRef(null)
-  const playBoth = () => {
-    if (!current) return
-    if (pendingRef.current) clearTimeout(pendingRef.current)
-    playQuestion()
-    pendingRef.current = setTimeout(playReference, 950)
-  }
-  useEffect(() => () => { if (pendingRef.current) clearTimeout(pendingRef.current) }, [])
-
+  // Space plays/replays just the question note — no auto-play on a fresh
+  // prompt or on first load, only an explicit press (spacebar, or a bar's
+  // own speaker icon for that one note specifically).
   useEffect(() => {
     const handler = (e) => {
       if (e.code !== 'Space') return
       const tgt = e.target
       if (tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA' || tgt.isContentEditable)) return
       e.preventDefault()
-      playBoth()
+      playQuestion()
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current])
+
+  // A newly-pressed key on the app's keyboard counts as an answer too, same
+  // pattern Note Identification already uses — resolved to its natural-
+  // letter name so it matches the button grid's own answer format exactly.
+  const prevPressedRef = useRef(new Set())
+  useEffect(() => {
+    const currSet = pressedNotes ? (pressedNotes instanceof Set ? pressedNotes : new Set(Array.from(pressedNotes))) : new Set()
+    const prev = prevPressedRef.current
+    const added = []
+    for (const n of currSet) if (!prev.has(n)) added.push(n)
+    prevPressedRef.current = currSet
+    if (added.length === 0 || !current || lastResult) return
+    const pc = ((added[0] % 12) + 12) % 12
+    const letter = NOTE_NAMES[pc]
+    if (letter) submitAnswer(letter)
+  }, [pressedNotes, current, lastResult, submitAnswer])
 
   const cellState = (value) => {
     if (!lastResult) return null
@@ -88,7 +104,7 @@ export default function NoteEarTraining() {
       <div className="identify-card">
         {current ? (
           <>
-            <PlaybackBar label="Question Note" onPlay={playBoth} durationMs={800} revealText={lastResult ? current.name : null} />
+            <PlaybackBar label="Question Note" onPlay={playQuestion} durationMs={800} revealText={lastResult ? current.name : null} />
             <PlaybackBar label="Reference Note" onPlay={playReference} durationMs={800} revealText="C" />
           </>
         ) : (
