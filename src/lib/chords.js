@@ -305,15 +305,25 @@ export function recognize(pressedNotes) {
     if ((b.exactMatch?1:0) !== (a.exactMatch?1:0)) return (b.exactMatch?1:0) - (a.exactMatch?1:0)
     // 2) more matched pitch-classes next
     if (b.matchedCount !== a.matchedCount) return b.matchedCount - a.matchedCount
-    // 3) prefer candidates with no unplayed notes (chordSize === what was actually
-    // pressed) over supersets that require notes you didn't play (e.g. Cm7 — exactly
-    // what's pressed — over Cm9, which is a superset missing its unplayed 9th)
-    const aTight = a.chordSize === pressedSize ? 1 : 0
-    const bTight = b.chordSize === pressedSize ? 1 : 0
-    if (aTight !== bTight) return bTight - aTight
-    // 4) among equally-tight candidates, prefer whichever is in root position
-    // (root === bass note actually played) — this is what separates e.g. Cm7
-    // from D#6, which are the exact same four pitch classes
+    // 3) fewer unplayed notes assumed — a tight 3-note chord (1 unplayed
+    // note) beats a looser 5-note superset (3 unplayed notes) that happens
+    // to share the same matched notes, even before root position is
+    // considered (step 4). This used to be a binary "chordSize equals what
+    // you actually pressed" check, which — with anything less than a full
+    // triad pressed — never fires (no real chord has only 1 or 2 tones,
+    // fifths/fourths aside, and those are already handled above), so it
+    // always tied and let root position alone decide; a bass-rooted 5-note
+    // superset would then outrank a same-matched-count, non-bass-rooted
+    // triad that needed far less assumed. Counting the actual gap fixes
+    // that without changing anything about true exact/tight matches (their
+    // gap is already 0, so they still win this step outright).
+    const aMissing = a.chordSize - a.matchedCount
+    const bMissing = b.chordSize - b.matchedCount
+    if (aMissing !== bMissing) return aMissing - bMissing
+    // 4) among comparably tight candidates, prefer whichever is in root
+    // position (root === bass note actually played) — this is what
+    // separates e.g. Cm7 from D#6, which are the exact same four pitch
+    // classes
     const aRootPos = a.root === bassPC ? 1 : 0
     const bRootPos = b.root === bassPC ? 1 : 0
     if (aRootPos !== bRootPos) return bRootPos - aRootPos
