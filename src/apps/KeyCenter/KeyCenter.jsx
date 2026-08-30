@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   getDiatonicChords, getSecondaryDominants, voiceChordNearMiddleC, ROOTS,
   getModalInterchangeChords, getTwoFiveChords, getSpecialTwoFives,
-  tritoneSub, getDiminishedApproachChords, getVAlternatives
+  tritoneSub, getDiminishedApproachChords, getVAlternatives, generateProgression
 } from '../../lib/harmony'
 import { chordFormulas, formatMatch, intervalName, recognize } from '../../lib/chords'
 import { playChord } from '../../audio/engine'
@@ -110,6 +110,51 @@ export default function KeyCenter({ pressedNotes, setKeyboardTargetPCs = () => {
     playChord(voiceChordNearMiddleC(root, type))
   }
 
+  // --- Example progression: generated from whichever strands are enabled
+  // above, then playable back-to-back through the synth.
+  const [progression, setProgression] = useState(null)
+  const [isPlayingProgression, setIsPlayingProgression] = useState(false)
+  const playbackTimersRef = useRef([])
+
+  const stopProgressionPlayback = () => {
+    playbackTimersRef.current.forEach((id) => clearTimeout(id))
+    playbackTimersRef.current = []
+    setIsPlayingProgression(false)
+  }
+  useEffect(() => () => stopProgressionPlayback(), []) // clear any pending timers on unmount
+  useEffect(() => { setProgression(null); stopProgressionPlayback() }, [keyRoot]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const generateNewProgression = () => {
+    stopProgressionPlayback()
+    setProgression(generateProgression(keyRoot, {
+      sevenths,
+      secondaryDominants: showSecondaryDominants,
+      twoFives: showTwoFives,
+      tritoneSubs,
+      diminishedApproach: showDiminishedApproach,
+      modalInterchange: showModalInterchange,
+      vAlternatives: showVAlternatives
+    }))
+  }
+
+  const playProgression = () => {
+    if (!progression || progression.length === 0) return
+    stopProgressionPlayback()
+    const flat = progression.flat()
+    const stepMs = 900
+    const chordDurMs = 750
+    setIsPlayingProgression(true)
+    flat.forEach((c, i) => {
+      const id = setTimeout(() => {
+        setActiveChip({ root: c.root, type: c.type, label: c.label })
+        playChord(voiceChordNearMiddleC(c.root, c.type), chordDurMs)
+      }, i * stepMs)
+      playbackTimersRef.current.push(id)
+    })
+    const endId = setTimeout(() => { setIsPlayingProgression(false); setActiveChip(null) }, flat.length * stepMs)
+    playbackTimersRef.current.push(endId)
+  }
+
   // Push the active chip's notes to the keyboard for highlighting.
   useEffect(() => {
     try {
@@ -155,8 +200,8 @@ export default function KeyCenter({ pressedNotes, setKeyboardTargetPCs = () => {
       <h2>Key Center</h2>
       <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 16 }}>
         {/* Key picker + options */}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <div className="filter-block">
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+          <div className="filter-block" style={{ flex: '0 1 320px' }}>
             <div className="filter-title">Key</div>
             <div className="roots" style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
               {ROOTS.map((rName, rIdx) => (
@@ -171,24 +216,70 @@ export default function KeyCenter({ pressedNotes, setKeyboardTargetPCs = () => {
             </div>
           </div>
 
-          <div className="filter-block" style={{ minWidth: 300, maxWidth: 460 }}>
+          <div className="filter-block" style={{ flex: '1 1 420px', minWidth: 320 }}>
             <div className="filter-title">Options</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', marginTop: 8, border: '1px solid rgba(255,255,255,0.07)', borderRadius: 8, overflow: 'hidden' }}>
               {[
                 { active: sevenths, toggle: () => setSevenths((v) => !v), label: 'Sevenths', desc: 'Show the diatonic chords as 7th chords instead of plain triads.' },
                 { active: showSecondaryDominants, toggle: () => setShowSecondaryDominants((v) => !v), label: 'Secondary Dominants', desc: "The dominant (V) of each diatonic chord — not itself diatonic, but pulls strongly into the chord it targets." },
                 { active: showTwoFives, toggle: () => setShowTwoFives((v) => !v), label: "ii-V's", desc: "The ii chord preceding each secondary dominant's V, plus four named pairs (Backdoor, Tritone, vi-II, vii-III) that lead to a specific target rather than a scale degree." },
-                { active: tritoneSubs, toggle: () => setTritoneSubs((v) => !v), label: 'Tritone Subs', desc: 'Swaps every dominant chord shown (Secondary Dominants and ii-V\'s V chord) for the dominant a tritone away — same 3rd/7th inverted, resolves by half-step instead of a 5th.' },
+                { active: tritoneSubs, toggle: () => setTritoneSubs((v) => !v), label: 'Tritone Subs', desc: "Swaps every dominant chord shown (Secondary Dominants and ii-V's V chord) for the dominant a tritone away — same 3rd/7th inverted, resolves by half-step instead of a 5th." },
                 { active: showDiminishedApproach, toggle: () => setShowDiminishedApproach((v) => !v), label: 'Diminished Approach', desc: "A diminished 7th chord a half-step below each target — interchangeable with that target's secondary dominant (raise its root a half-step and you get the dominant chord back)." },
                 { active: showModalInterchange, toggle: () => setShowModalInterchange((v) => !v), label: 'Modal Interchange', desc: 'Chords borrowed from the parallel minor modes (Aeolian, Dorian, Phrygian) — same tonic, different mode, then back to the major key.' },
                 { active: showVAlternatives, toggle: () => setShowVAlternatives((v) => !v), label: 'V Alternatives', desc: 'Non-diatonic chords that can stand in for V specifically, all sharing its pull back to the tonic.' }
-              ].map((o) => (
-                <div key={o.label} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                  <button className={`play-cat-btn ${o.active ? 'active' : ''}`} style={{ flexShrink: 0 }} onClick={o.toggle}>{o.label}</button>
-                  <div style={{ fontSize: 11, color: 'var(--muted)', opacity: 0.8, paddingTop: 5, lineHeight: 1.35 }}>{o.desc}</div>
-                </div>
+              ].map((o, i) => (
+                <label
+                  key={o.label}
+                  style={{
+                    display: 'flex', alignItems: 'flex-start', gap: 10, padding: '9px 10px', cursor: 'pointer',
+                    background: o.active ? 'rgba(110,231,183,0.08)' : 'transparent',
+                    borderTop: i === 0 ? 'none' : '1px solid rgba(255,255,255,0.05)'
+                  }}
+                >
+                  <input type="checkbox" checked={o.active} onChange={o.toggle} style={{ marginTop: 3, accentColor: 'var(--accent)', flexShrink: 0, cursor: 'pointer' }} />
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: o.active ? 'var(--accent)' : 'inherit' }}>{o.label}</div>
+                    <div style={{ fontSize: 11.5, color: 'var(--muted)', opacity: 0.85, lineHeight: 1.4, marginTop: 2 }}>{o.desc}</div>
+                  </div>
+                </label>
               ))}
             </div>
+          </div>
+        </div>
+
+        {/* Example progression */}
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <div style={{ width: '100%', maxWidth: 1100, background: 'rgba(255,255,255,0.02)', padding: 18, borderRadius: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+              <div style={{ fontSize: 15, fontWeight: 700 }}>Example Progression</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="play-cat-btn" onClick={generateNewProgression}>{progression ? 'New Example' : 'Generate Example'}</button>
+                <button
+                  className={`primary-btn ${isPlayingProgression ? 'active' : ''}`}
+                  onClick={isPlayingProgression ? stopProgressionPlayback : playProgression}
+                  disabled={!progression}
+                >
+                  {isPlayingProgression ? '■ Stop' : '▶ Play'}
+                </button>
+              </div>
+            </div>
+            {progression ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 16, justifyContent: 'center' }}>
+                {progression.map((bar, bi) => (
+                  <React.Fragment key={`bar-${bi}`}>
+                    <div style={{ color: 'var(--muted)', fontSize: 22, opacity: 0.35 }}>|</div>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      {bar.map((c, ci) => (
+                        <div key={`bc-${bi}-${ci}`}>{renderChip(c.root, c.type, c.label, { small: true })}</div>
+                      ))}
+                    </div>
+                  </React.Fragment>
+                ))}
+                <div style={{ color: 'var(--muted)', fontSize: 22, opacity: 0.35 }}>|</div>
+              </div>
+            ) : (
+              <div className="muted" style={{ textAlign: 'center', marginTop: 12, fontSize: 13 }}>Generate an example progression using whichever options above are turned on.</div>
+            )}
           </div>
         </div>
 

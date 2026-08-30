@@ -143,6 +143,108 @@ export function getVAlternatives(keyRoot) {
   ]
 }
 
+// --- Example progression generator ---
+// Builds a short, playable example progression that showcases whichever
+// strands are currently enabled — same idea as the worked examples in
+// creative_chord_choices.txt (|C E7 |Am7 A7 |Dm7 D7 G7 |C |, etc.), just
+// generated on demand instead of hand-picked. Picks a random diatonic
+// "backbone" (a common progression shape by scale degree), then for each
+// transition into a non-tonic degree, optionally prepends an approach
+// (secondary dominant / ii-V / diminished 7th); transitions back to the
+// tonic instead draw from V Alternatives / the special ii-Vs / plain V.
+// Returns an array of bars, each an array of { root, type, label } chords.
+const PROGRESSION_TEMPLATES = [
+  [0, 5, 3, 4, 0], // I vi IV V I
+  [0, 3, 4, 0], // I IV V I
+  [0, 1, 4, 0], // I ii V I
+  [0, 5, 1, 4, 0], // I vi ii V I
+  [0, 2, 5, 3, 4, 0], // I iii vi IV V I
+  [0, 3, 1, 4, 0] // I IV ii V I
+]
+
+export function generateProgression(keyRoot, opts = {}) {
+  const sevenths = !!opts.sevenths
+  const useSD = !!opts.secondaryDominants
+  const useTwoFives = !!opts.twoFives
+  const useTritone = !!opts.tritoneSubs
+  const useDim = !!opts.diminishedApproach
+  const useModal = !!opts.modalInterchange
+  const useVAlt = !!opts.vAlternatives
+
+  const diatonic = getDiatonicChords(keyRoot, { sevenths })
+  const secondaryDominants = getSecondaryDominants(keyRoot)
+  const twoFives = getTwoFiveChords(keyRoot)
+  const specialTwoFives = getSpecialTwoFives(keyRoot)
+  const diminishedApproachChords = getDiminishedApproachChords(keyRoot)
+  const vAlternativesChords = getVAlternatives(keyRoot)
+  const modalInterchangeChords = getModalInterchangeChords(keyRoot, { sevenths })
+
+  const rnd = (n) => Math.floor(Math.random() * n)
+  const pick = (arr) => (arr && arr.length > 0 ? arr[rnd(arr.length)] : null)
+
+  const applyTT = (chord, label) => (useTritone && chord.type === '7'
+    ? { root: tritoneSub(chord.root), type: '7', label: `${label} (T.T.)` }
+    : { root: chord.root, type: chord.type, label })
+
+  const backbone = pick(PROGRESSION_TEMPLATES)
+  const bars = [[{ root: diatonic[backbone[0]].root, type: diatonic[backbone[0]].type, label: diatonic[backbone[0]].roman }]]
+
+  for (let i = 1; i < backbone.length; i++) {
+    const deg = backbone[i]
+    const target = diatonic[deg]
+    const bar = []
+
+    if (deg === 0) {
+      // Resolving back to the tonic — draw from whichever of V Alternatives /
+      // the special ii-Vs (that target I) / the plain diatonic V is enabled.
+      const choices = ['plain']
+      if (useVAlt) choices.push('valt')
+      if (useTwoFives) choices.push('special')
+      const choice = pick(choices)
+      if (choice === 'valt') {
+        const alt = pick(vAlternativesChords)
+        bar.push({ root: alt.root, type: alt.type, label: alt.label })
+      } else if (choice === 'special') {
+        const stf = pick(specialTwoFives.filter((s) => s.targetRoman === 'I'))
+        bar.push({ root: stf.ii.root, type: stf.ii.type, label: 'ii' })
+        bar.push(applyTT(stf.v, 'V'))
+      } else {
+        const v5 = diatonic[4]
+        bar.push(applyTT({ root: v5.root, type: sevenths ? '7' : v5.type }, 'V'))
+      }
+    } else {
+      // Approaching a non-tonic degree — secondary dominant (optionally
+      // preceded by its ii, optionally tritone-subbed) or a diminished
+      // approach chord instead.
+      const sd = secondaryDominants.find((s) => s.targetDegree === deg)
+      const tf = twoFives.find((s) => s.targetDegree === deg)
+      const da = diminishedApproachChords.find((s) => s.targetDegree === deg)
+      const approaches = []
+      if (useSD && sd) approaches.push('sd')
+      if (useDim && da) approaches.push('dim')
+      const choice = pick(approaches)
+      if (choice === 'sd') {
+        if (useTwoFives && tf) bar.push({ root: tf.ii.root, type: tf.ii.type, label: 'ii' })
+        bar.push(applyTT(sd, sd.label))
+      } else if (choice === 'dim') {
+        bar.push({ root: da.root, type: da.type, label: da.label })
+      }
+    }
+
+    // Occasionally borrow the target itself from a parallel minor mode
+    // instead of using its plain diatonic form.
+    let targetChord = { root: target.root, type: target.type, label: target.roman }
+    if (useModal && Math.random() < 0.3) {
+      const swap = modalInterchangeChords.find((m) => m.root === target.root && m.type !== target.type)
+      if (swap) targetChord = { root: swap.root, type: swap.type, label: swap.label }
+    }
+    bar.push(targetChord)
+    bars.push(bar)
+  }
+
+  return bars
+}
+
 // A simple close-position voicing for a chord, stacked upward from the root
 // and anchored near middle C (60) — same "walk up, then shift whole octaves
 // to fit range/anchor" approach buildScaleSequence uses for scale runs.
