@@ -7,13 +7,6 @@ import {
 import { chordFormulas, formatMatch, intervalName, recognize } from '../../lib/chords'
 import { playChord } from '../../audio/engine'
 
-// Struck softer than the 0.85 used for single-chip preview clicks, so a
-// full progression doesn't hammer every chord at near-max force. Master
-// Volume (Settings) already governs overall loudness for every sound
-// source in the app — this is just the fixed per-note velocity, not a
-// second volume control.
-const PROGRESSION_VELOCITY = 0.6
-
 // Module-scope so it keeps a stable component identity across KeyCenter's
 // frequent re-renders (this component re-renders on every pressed-note
 // change) — defining it inside KeyCenter's own render body would make React
@@ -179,7 +172,7 @@ export default function KeyCenter({ pressedNotes, setKeyboardTargetPCs = () => {
         const id = setTimeout(() => {
           setActiveChip({ root: c.root, type: c.type, label: c.label })
           setPlayingPos({ bi, ci })
-          playChord(voiceChordNearMiddleC(c.root, c.type), durMs * sustainRatio, PROGRESSION_VELOCITY)
+          playChord(voiceChordNearMiddleC(c.root, c.type), durMs * sustainRatio) // uses the shared default velocity, same as every other click-triggered sound
         }, elapsed + barElapsed)
         playbackTimersRef.current.push(id)
         barElapsed += durMs

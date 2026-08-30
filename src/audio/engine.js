@@ -10,6 +10,15 @@ import { SplendidGrandPiano, CacheStorage } from 'smplr'
 
 const STORAGE_KEY = 'audio:synth'
 
+// Single shared default note velocity for every non-MIDI trigger across
+// every app — on-screen/mouse keyboard clicks, Key Center's chord chip
+// previews, Key Center's example-progression playback, anything else that
+// calls noteOn/playChord without an explicit velocity. Real MIDI input
+// keeps reporting its own actual per-note velocity (that's genuine
+// performance data, not a default to override) — see App.jsx's initMIDI
+// callback, which always passes the device's real velocity explicitly.
+export const DEFAULT_VELOCITY = 0.6
+
 export const AUDIO_DEFAULTS = {
   muted: false,
   masterVolume: 0.7
@@ -79,7 +88,7 @@ if (typeof window !== 'undefined') {
   window.addEventListener('keydown', warmup, { once: true })
 }
 
-export function noteOn(midi, velocity = 0.85) {
+export function noteOn(midi, velocity = DEFAULT_VELOCITY) {
   const audioCtx = ensureAudioContext()
   if (!audioCtx) return
   const p = ensurePiano()
@@ -104,7 +113,7 @@ export function allNotesOff() {
   for (const midi of Array.from(pianoStops.keys())) noteOff(midi)
 }
 
-export function playChord(midis, durationMs = 900, velocity = 0.85) {
+export function playChord(midis, durationMs = 900, velocity = DEFAULT_VELOCITY) {
   if (!Array.isArray(midis) || midis.length === 0) return
   for (const m of midis) noteOn(m, velocity)
   setTimeout(() => { for (const m of midis) noteOff(m) }, durationMs)

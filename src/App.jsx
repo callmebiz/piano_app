@@ -149,7 +149,7 @@ export default function App() {
                       s.add(n)
                       return s
                     })
-                    noteOn(n, 0.85)
+                    noteOn(n) // on-screen click has no real velocity — uses the shared default
                   }}
                   onNoteOff={(n) => {
                     setPressed(prev => {
