@@ -147,19 +147,30 @@ export default function KeyCenter({ pressedNotes, setKeyboardTargetPCs = () => {
   const playProgression = () => {
     if (!progression || progression.length === 0) return
     stopProgressionPlayback()
-    const flat = progression.flatMap((bar, bi) => bar.map((c, ci) => ({ ...c, bi, ci })))
-    const stepMs = 900
-    const chordDurMs = 750
+    // Each bar is one measure of fixed length, split evenly across however
+    // many chords sit inside it — not a flat per-chord duration. A bar with
+    // just the target chord (e.g. the final tonic) gets the whole measure;
+    // a bar with an approach chord (ii, V/x, °7) sharing it with the target
+    // it resolves to — the case that reads like a "pickup" leading into the
+    // target — divides that same measure between them, so the approach
+    // chord passes by quickly and the target still lands on the downbeat.
+    const barMs = 1600
+    const sustainRatio = 0.85 // leave a small gap before the next attack
     setIsPlayingProgression(true)
-    flat.forEach((c, i) => {
-      const id = setTimeout(() => {
-        setActiveChip({ root: c.root, type: c.type, label: c.label })
-        setPlayingPos({ bi: c.bi, ci: c.ci })
-        playChord(voiceChordNearMiddleC(c.root, c.type), chordDurMs)
-      }, i * stepMs)
-      playbackTimersRef.current.push(id)
+    let elapsed = 0
+    progression.forEach((bar, bi) => {
+      const slotMs = barMs / bar.length
+      bar.forEach((c, ci) => {
+        const id = setTimeout(() => {
+          setActiveChip({ root: c.root, type: c.type, label: c.label })
+          setPlayingPos({ bi, ci })
+          playChord(voiceChordNearMiddleC(c.root, c.type), slotMs * sustainRatio)
+        }, elapsed + ci * slotMs)
+        playbackTimersRef.current.push(id)
+      })
+      elapsed += barMs
     })
-    const endId = setTimeout(() => { setIsPlayingProgression(false); setActiveChip(null); setPlayingPos(null) }, flat.length * stepMs)
+    const endId = setTimeout(() => { setIsPlayingProgression(false); setActiveChip(null); setPlayingPos(null) }, elapsed)
     playbackTimersRef.current.push(endId)
   }
 
