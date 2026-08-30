@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
+import { recordAttempt } from '../../lib/practiceStats'
 
-// Generalized exercise engine shared by every Identify sub-type (Note today;
-// Key Signature/Interval/Scale/Chord next, then Construction reuses the same
-// shape). Deliberately small: pick a prompt, check an answer, track score +
-// per-prompt stats, advance. Nothing here is note-specific.
+// Generalized exercise engine shared by every Identify sub-type. Deliberately
+// small: pick a prompt, check an answer, track score + shared practice
+// stats (lifetime accuracy/speed, daily trend, streaks, and prev-prompt
+// transition timing), advance. Nothing here is note-specific.
 
 function randomInt(max) { return Math.floor(Math.random() * max) }
 
@@ -18,17 +19,27 @@ function pickDifferent(pool, avoidKey, keyFn) {
   return pool[0]
 }
 
-export default function useIdentifyExercise({ pool, isCorrect, statsKey, promptKey = (p) => JSON.stringify(p), feedbackMs = 900 }) {
+// exercise: id this exercise's stats live under in lib/practiceStats.js
+// (e.g. 'identify-note'). promptLabel: human display string for a prompt,
+// used as that bucket's label in the Stats view.
+export default function useIdentifyExercise({ pool, isCorrect, exercise, promptKey, promptLabel = (p) => promptKey(p), feedbackMs = 900 }) {
   const [current, setCurrent] = useState(() => (pool && pool.length > 0 ? pool[randomInt(pool.length)] : null))
   const [score, setScore] = useState({ correct: 0, total: 0 })
   const [lastResult, setLastResult] = useState(null) // { correct, answer } | null
-  const [stats, setStats] = useState(() => {
-    try { const raw = localStorage.getItem(statsKey); if (raw) return JSON.parse(raw) } catch (e) {}
-    return {}
-  })
   const advanceTimerRef = useRef(null)
 
+  // Timing: reset whenever a new prompt actually appears.
+  const promptShownAtRef = useRef(performance.now())
+  useEffect(() => { promptShownAtRef.current = performance.now() }, [current])
+
+  // Which prompt (by key) immediately preceded the current one — powers
+  // transition timing ("how fast after X do I get Y"). Updated in beginNext
+  // using the *outgoing* prompt, so it reflects "one before current" at the
+  // moment submitAnswer reads it, not "current" itself.
+  const lastPromptKeyRef = useRef(null)
+
   const beginNext = (avoid) => {
+    lastPromptKeyRef.current = avoid ? promptKey(avoid) : null
     const next = pickDifferent(pool, avoid ? promptKey(avoid) : null, promptKey)
     setCurrent(next)
     setLastResult(null)
@@ -46,11 +57,6 @@ export default function useIdentifyExercise({ pool, isCorrect, statsKey, promptK
 
   useEffect(() => () => { if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current) }, [])
 
-  const saveStats = (s) => {
-    try { localStorage.setItem(statsKey, JSON.stringify(s)) } catch (e) {}
-    setStats(s)
-  }
-
   const submitAnswer = (answer) => {
     if (!current || lastResult) return // ignore clicks while feedback is showing
     const correct = isCorrect(current, answer)
@@ -58,11 +64,15 @@ export default function useIdentifyExercise({ pool, isCorrect, statsKey, promptK
     setLastResult({ correct, answer })
 
     const key = promptKey(current)
-    const s = JSON.parse(JSON.stringify(stats))
-    if (!s[key]) s[key] = { attempts: 0, correct: 0 }
-    s[key].attempts += 1
-    if (correct) s[key].correct += 1
-    saveStats(s)
+    const timeMs = performance.now() - promptShownAtRef.current
+    recordAttempt({
+      exercise,
+      buckets: [{ key, label: promptLabel(current) }],
+      correct,
+      timeMs,
+      primaryKey: key,
+      fromKey: lastPromptKeyRef.current
+    })
 
     if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current)
     advanceTimerRef.current = setTimeout(() => beginNext(current), feedbackMs)
@@ -74,7 +84,6 @@ export default function useIdentifyExercise({ pool, isCorrect, statsKey, promptK
   }
 
   const resetScore = () => setScore({ correct: 0, total: 0 })
-  const resetStats = () => saveStats({})
 
-  return { current, score, lastResult, stats, submitAnswer, skip, resetScore, resetStats }
+  return { current, score, lastResult, submitAnswer, skip, resetScore }
 }

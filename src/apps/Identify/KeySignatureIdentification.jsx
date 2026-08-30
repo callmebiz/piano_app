@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import Staff from '../../components/Staff'
 import AnswerGrid from './AnswerGrid'
+import StatsModal from '../../components/StatsModal'
 import useIdentifyExercise from './useIdentifyExercise'
 import { useStaffSettings } from '../../lib/staffSettings'
 import { SHARP_NAMES, NATURAL_NAMES, FLAT_NAMES, MAJOR_KEY_SIGNATURES } from '../../lib/staffNotes'
@@ -24,11 +25,14 @@ export default function KeySignatureIdentification() {
   const [clefMode, setClefMode] = useState(loadClefMode)
   useEffect(() => { try { localStorage.setItem('identify:keysig:clef', clefMode) } catch (e) {} }, [clefMode])
 
+  const [showStats, setShowStats] = useState(false)
+
   const { current, score, lastResult, submitAnswer, skip, resetScore } = useIdentifyExercise({
     pool,
     isCorrect: (prompt, answer) => answer === prompt.name,
-    statsKey: 'identify:keysig:stats',
-    promptKey: (p) => p.name
+    exercise: 'identify-keysig',
+    promptKey: (p) => p.name,
+    promptLabel: (p) => `${p.name} Major`
   })
 
   // Clef doesn't change *which* key signatures are possible (unlike Note ID's
@@ -81,8 +85,11 @@ export default function KeySignatureIdentification() {
             {score.total > 0 ? ` (${Math.round((score.correct / score.total) * 100)}%)` : ''}
           </div>
           <button className="play-cat-btn" onClick={resetScore}>Reset Score</button>
+          <button className="play-cat-btn" onClick={() => setShowStats(true)}>View Stats</button>
         </div>
       </div>
+
+      <StatsModal exercise="identify-keysig" title="Key Signature Identification" open={showStats} onClose={() => setShowStats(false)} />
     </div>
   )
 }

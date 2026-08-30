@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import Staff from '../../components/Staff'
 import AnswerGrid from './AnswerGrid'
+import StatsModal from '../../components/StatsModal'
 import useIdentifyExercise from './useIdentifyExercise'
 import { buildSpellingPool, SHARP_NAMES, NATURAL_NAMES, FLAT_NAMES, ALL_SPELLINGS } from '../../lib/staffNotes'
 import { useStaffSettings } from '../../lib/staffSettings'
@@ -43,13 +44,16 @@ export default function NoteIdentification({ pressedNotes, setKeyboardTargetPCs 
     return buildSpellingPool({ lowMidi, highMidi, spellings: accidentals ? ALL_SPELLINGS : NATURAL_NAMES })
   }, [clefMode, accidentals])
 
+  const [showStats, setShowStats] = useState(false)
+
   const { current, score, lastResult, submitAnswer, skip, resetScore } = useIdentifyExercise({
     pool,
     // Button answers are exact-spelling strings; keyboard answers are a
     // sounding pitch class (a physical key can't disambiguate spelling).
     isCorrect: (prompt, answer) => (typeof answer === 'number' ? answer === prompt.pc : answer === prompt.name),
-    statsKey: 'identify:note:stats',
-    promptKey: (p) => `${p.name}${p.midi}`
+    exercise: 'identify-note',
+    promptKey: (p) => `${p.name}${p.midi}`,
+    promptLabel: (p) => p.name
   })
 
   const staffNotes = current ? [{ keys: [current.vexKey], duration: 'w', clef: clefForMidi(current.midi) }] : []
@@ -141,8 +145,11 @@ export default function NoteIdentification({ pressedNotes, setKeyboardTargetPCs 
             {score.total > 0 ? ` (${Math.round((score.correct / score.total) * 100)}%)` : ''}
           </div>
           <button className="play-cat-btn" onClick={resetScore}>Reset Score</button>
+          <button className="play-cat-btn" onClick={() => setShowStats(true)}>View Stats</button>
         </div>
       </div>
+
+      <StatsModal exercise="identify-note" title="Note Identification" open={showStats} onClose={() => setShowStats(false)} />
     </div>
   )
 }

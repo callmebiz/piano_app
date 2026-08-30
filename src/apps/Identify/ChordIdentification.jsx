@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import Staff from '../../components/Staff'
 import AnswerGrid from './AnswerGrid'
+import StatsModal from '../../components/StatsModal'
 import useIdentifyExercise from './useIdentifyExercise'
 import { useStaffSettings } from '../../lib/staffSettings'
-import { buildChordSpelling } from '../../lib/chords'
+import { buildChordSpelling, formatMatch, chordFormulas, ROOTS } from '../../lib/chords'
 
 const CHORD_TYPES = ['major', 'minor', 'aug', 'dim', '7', 'M7', 'm7', 'm7b5', 'dim7']
 const CHORD_LABELS = {
@@ -55,11 +56,14 @@ export default function ChordIdentification() {
 
   const pool = useMemo(() => buildPool(CHORD_TYPES.filter((t) => types[t])), [types])
 
+  const [showStats, setShowStats] = useState(false)
+
   const { current, score, lastResult, submitAnswer, skip, resetScore } = useIdentifyExercise({
     pool,
     isCorrect: (prompt, answer) => answer === prompt.name,
-    statsKey: 'identify:chord:stats',
-    promptKey: (p) => `${p.name}-${p.root}`
+    exercise: 'identify-chord',
+    promptKey: (p) => `${p.name}-${p.root}`,
+    promptLabel: (p) => formatMatch({ root: p.root, rootName: ROOTS[p.root], type: p.name, chordSize: (chordFormulas[p.name] || []).length }, []).displayName
   })
 
   // Same stale-pick issue as Note ID: without forcing a fresh pick, toggling
@@ -118,8 +122,11 @@ export default function ChordIdentification() {
             {score.total > 0 ? ` (${Math.round((score.correct / score.total) * 100)}%)` : ''}
           </div>
           <button className="play-cat-btn" onClick={resetScore}>Reset Score</button>
+          <button className="play-cat-btn" onClick={() => setShowStats(true)}>View Stats</button>
         </div>
       </div>
+
+      <StatsModal exercise="identify-chord" title="Chord Identification" open={showStats} onClose={() => setShowStats(false)} />
     </div>
   )
 }

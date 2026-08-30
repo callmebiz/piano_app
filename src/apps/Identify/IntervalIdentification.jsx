@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import Staff from '../../components/Staff'
 import AnswerGrid from './AnswerGrid'
+import StatsModal from '../../components/StatsModal'
 import useIdentifyExercise from './useIdentifyExercise'
 import { useStaffSettings } from '../../lib/staffSettings'
 import { parseSpelling, spellingMidi, vexKeyFor, CANONICAL_ROOTS } from '../../lib/staffNotes'
@@ -85,16 +86,17 @@ export default function IntervalIdentification() {
   // answer from how it built the prompt, no need to re-derive it.
   const promptNumber = (prompt) => Number(prompt.name.slice(1))
 
+  const [showStats, setShowStats] = useState(false)
+
   const { current, score, lastResult, submitAnswer, skip, resetScore } = useIdentifyExercise({
     pool,
     isCorrect: distanceMode
       ? (prompt, answer) => answer === promptNumber(prompt)
       : (prompt, answer) => answer === prompt.name,
-    // Same stats bucket regardless of mode — useIdentifyExercise only loads
-    // statsKey once on mount, so switching it live here would silently mix
-    // one mode's in-memory stats into the other's storage key on next save.
-    statsKey: 'identify:interval:stats',
-    promptKey: (p) => `${p.root.name}${p.root.midi}-${p.name}`
+    // Same stats bucket regardless of mode.
+    exercise: 'identify-interval',
+    promptKey: (p) => `${p.root.name}${p.root.midi}-${p.name}`,
+    promptLabel: (p) => `${p.root.name} ${p.name}`
   })
 
   // Same stale-pick issue as Note ID: without forcing a fresh pick, toggling
@@ -160,8 +162,11 @@ export default function IntervalIdentification() {
             {score.total > 0 ? ` (${Math.round((score.correct / score.total) * 100)}%)` : ''}
           </div>
           <button className="play-cat-btn" onClick={resetScore}>Reset Score</button>
+          <button className="play-cat-btn" onClick={() => setShowStats(true)}>View Stats</button>
         </div>
       </div>
+
+      <StatsModal exercise="identify-interval" title="Interval Identification" open={showStats} onClose={() => setShowStats(false)} />
     </div>
   )
 }

@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import Staff from '../../components/Staff'
 import AnswerGrid from './AnswerGrid'
+import StatsModal from '../../components/StatsModal'
 import useIdentifyExercise from './useIdentifyExercise'
 import { useStaffSettings } from '../../lib/staffSettings'
-import { buildScaleSpelling, SCALE_TYPES, scaleLongNames } from '../../lib/scales'
+import { buildScaleSpelling, SCALE_TYPES, scaleLongNames, ROOTS } from '../../lib/scales'
 
 // All 12 roots now that spelling is correctly handled (buildScaleSpelling
 // skips any root/type combo that would need a double accidental).
@@ -46,11 +47,14 @@ export default function ScaleIdentification() {
 
   const pool = useMemo(() => buildPool(SCALE_TYPES.filter((t) => types[t])), [types])
 
+  const [showStats, setShowStats] = useState(false)
+
   const { current, score, lastResult, submitAnswer, skip, resetScore } = useIdentifyExercise({
     pool,
     isCorrect: (prompt, answer) => answer === prompt.name,
-    statsKey: 'identify:scale:stats',
-    promptKey: (p) => `${p.name}-${p.root}`
+    exercise: 'identify-scale',
+    promptKey: (p) => `${p.name}-${p.root}`,
+    promptLabel: (p) => `${ROOTS[p.root]} ${scaleLongNames[p.name]}`
   })
 
   // Same stale-pick issue as Note ID: without forcing a fresh pick, toggling
@@ -110,8 +114,11 @@ export default function ScaleIdentification() {
             {score.total > 0 ? ` (${Math.round((score.correct / score.total) * 100)}%)` : ''}
           </div>
           <button className="play-cat-btn" onClick={resetScore}>Reset Score</button>
+          <button className="play-cat-btn" onClick={() => setShowStats(true)}>View Stats</button>
         </div>
       </div>
+
+      <StatsModal exercise="identify-scale" title="Scale Identification" open={showStats} onClose={() => setShowStats(false)} />
     </div>
   )
 }
