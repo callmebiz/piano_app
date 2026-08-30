@@ -7,6 +7,12 @@ import { ROOTS } from './chords'
 import { parseSpelling, spellingMidi, vexKeyFor, CANONICAL_ROOTS } from './staffNotes'
 
 // Interval formulas relative to root (semitones, ascending order — index 0 is always 0/root).
+// The 7 modes are each just the major scale's own step pattern (W W H W W W H)
+// starting from a different degree — ionian/aeolian duplicate major/natMinor
+// numerically (same notes), kept as separate entries anyway since they're
+// taught as distinct labels (verified by rotating the major step pattern
+// from each of the 7 starting points and checking against known modal
+// formulas before adding).
 export const scaleFormulas = {
   major: [0, 2, 4, 5, 7, 9, 11],
   natMinor: [0, 2, 3, 5, 7, 8, 10],
@@ -14,11 +20,18 @@ export const scaleFormulas = {
   melMinor: [0, 2, 3, 5, 7, 9, 11],
   majPent: [0, 2, 4, 7, 9],
   minPent: [0, 3, 5, 7, 10],
-  blues: [0, 3, 5, 6, 7, 10]
+  blues: [0, 3, 5, 6, 7, 10],
+  ionian: [0, 2, 4, 5, 7, 9, 11],
+  dorian: [0, 2, 3, 5, 7, 9, 10],
+  phrygian: [0, 1, 3, 5, 7, 8, 10],
+  lydian: [0, 2, 4, 6, 7, 9, 11],
+  mixolydian: [0, 2, 4, 5, 7, 9, 10],
+  aeolian: [0, 2, 3, 5, 7, 8, 10],
+  locrian: [0, 1, 3, 5, 6, 8, 10]
 }
 
 // Ordered list of scale-type keys for consistent iteration/display order.
-export const SCALE_TYPES = ['major', 'natMinor', 'harMinor', 'melMinor', 'majPent', 'minPent', 'blues']
+export const SCALE_TYPES = ['major', 'natMinor', 'harMinor', 'melMinor', 'majPent', 'minPent', 'blues', 'ionian', 'dorian', 'phrygian', 'lydian', 'mixolydian', 'aeolian', 'locrian']
 
 // Human-readable long names for each scale type.
 export const scaleLongNames = {
@@ -28,7 +41,14 @@ export const scaleLongNames = {
   melMinor: 'Melodic Minor',
   majPent: 'Major Pentatonic',
   minPent: 'Minor Pentatonic',
-  blues: 'Blues'
+  blues: 'Blues',
+  ionian: 'Ionian',
+  dorian: 'Dorian',
+  phrygian: 'Phrygian',
+  lydian: 'Lydian',
+  mixolydian: 'Mixolydian',
+  aeolian: 'Aeolian',
+  locrian: 'Locrian'
 }
 
 export const MAX_OCTAVES = 4
@@ -164,7 +184,16 @@ const SCALE_LETTER_STEPS = {
   melMinor: [0, 1, 2, 3, 4, 5, 6],
   majPent: [0, 1, 2, 4, 5],
   minPent: [0, 2, 3, 4, 6],
-  blues: [0, 2, 3, 3, 4, 6]
+  blues: [0, 2, 3, 3, 4, 6],
+  // Every mode is a 7-note diatonic scale too — one consecutive letter per
+  // degree, same as major/natMinor/harMinor/melMinor above.
+  ionian: [0, 1, 2, 3, 4, 5, 6],
+  dorian: [0, 1, 2, 3, 4, 5, 6],
+  phrygian: [0, 1, 2, 3, 4, 5, 6],
+  lydian: [0, 1, 2, 3, 4, 5, 6],
+  mixolydian: [0, 1, 2, 3, 4, 5, 6],
+  aeolian: [0, 1, 2, 3, 4, 5, 6],
+  locrian: [0, 1, 2, 3, 4, 5, 6]
 }
 const LETTER_ORDER = ['C', 'D', 'E', 'F', 'G', 'A', 'B']
 

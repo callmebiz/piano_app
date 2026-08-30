@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import AnswerGrid from '../Identify/AnswerGrid'
 import useIdentifyExercise from '../Identify/useIdentifyExercise'
+import PlaybackBar from '../../components/PlaybackBar'
 import { buildChordSpelling, formatMatch, ROOTS } from '../../lib/chords'
 import { playChord } from '../../audio/engine'
 import StatsModal from '../../components/StatsModal'
@@ -107,14 +108,7 @@ export default function ChordEarTraining() {
       <div className="identify-header">Chord Ear Training</div>
       <div className="identify-card">
         {current ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '2rem 0' }}>
-            <button className="primary-btn" onClick={play} style={{ fontSize: 20, padding: '16px 32px' }}>▶ Play</button>
-            {lastResult && (
-              <div style={{ marginTop: 16, fontSize: 15, color: 'var(--muted)' }}>
-                That was <strong style={{ color: 'var(--accent)' }}>{revealName}</strong> ({CHORD_LABELS[current.name]})
-              </div>
-            )}
-          </div>
+          <PlaybackBar onPlay={play} durationMs={1400} revealText={lastResult ? `${revealName} (${CHORD_LABELS[current.name]})` : null} />
         ) : (
           <div className="muted" style={{ textAlign: 'center', padding: '2rem' }}>No chords available for the current options</div>
         )}

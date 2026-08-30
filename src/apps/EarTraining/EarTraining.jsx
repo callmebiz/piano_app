@@ -1,23 +1,26 @@
 import React, { useState } from 'react'
+import KeyboardEarTraining from './KeyboardEarTraining'
+import NoteEarTraining from './NoteEarTraining'
 import IntervalEarTraining from './IntervalEarTraining'
 import ChordEarTraining from './ChordEarTraining'
 import ScaleEarTraining from './ScaleEarTraining'
 
-// Tab shell for Ear Training — audio-only prompts (no notation shown),
-// reusing each Identify sub-type's own pool/answer-grid, just swapping the
-// Staff visual for a Play button. Note ID has no ear-training counterpart
-// here on purpose: naming an isolated pitch by ear alone is absolute-pitch
-// recognition (needs perfect pitch, a rare skill), not the relative-pitch
-// skill interval/chord/scale ear training actually builds. Key Signature
-// has no audio at all to train against, so it's skipped too.
+// Tab shell for Ear Training — audio-only prompts, answered either via a
+// button grid (Note/Interval/Chord/Scale) or the app's own keyboard
+// (Keyboard). Note/Keyboard Ear Training both play a fixed Reference Note
+// (middle C) alongside the question — what makes naming an isolated pitch
+// learnable at all is hearing it relative to a known anchor, not blind
+// absolute-pitch recognition.
 const TABS = [
+  { id: 'keyboard', title: 'Keyboard', enabled: true },
+  { id: 'note', title: 'Note', enabled: true },
   { id: 'interval', title: 'Interval', enabled: true },
   { id: 'chord', title: 'Chord', enabled: true },
   { id: 'scale', title: 'Scale', enabled: true }
 ]
 
-export default function EarTraining() {
-  const [tab, setTab] = useState('interval')
+export default function EarTraining({ pressedNotes }) {
+  const [tab, setTab] = useState('keyboard')
 
   return (
     <div className="chord-app">
@@ -35,6 +38,8 @@ export default function EarTraining() {
         ))}
       </div>
 
+      {tab === 'keyboard' && <KeyboardEarTraining pressedNotes={pressedNotes} />}
+      {tab === 'note' && <NoteEarTraining />}
       {tab === 'interval' && <IntervalEarTraining />}
       {tab === 'chord' && <ChordEarTraining />}
       {tab === 'scale' && <ScaleEarTraining />}
