@@ -50,7 +50,7 @@ Thumbs.db
 .localhistory/
 
 # Personal working notes, not part of the app
-/.notes/
+.notes/
 
 # Ignore generated node REPL history
 .node_repl_history
