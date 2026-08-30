@@ -16,6 +16,7 @@
 // just drop the key) to bring it back.
 export const APPS = [
   { id: 'identify', title: 'Identification', subtitle: 'Note, key signature, interval, scale & chord ID', platforms: ['desktop', 'mobile'] },
+  { id: 'eartraining', title: 'Ear Training', subtitle: 'Interval, chord & scale recognition by ear', platforms: ['desktop', 'mobile'] },
   { id: 'chord', title: 'Chord Recognition', subtitle: 'Identify played chords', platforms: ['desktop', 'mobile'] },
   { id: 'play', title: 'Play The Chord', subtitle: 'Play highlighted chords on your keyboard', platforms: ['desktop', 'mobile'] },
   { id: 'scales', title: 'Scales', subtitle: 'Practice scales in order', platforms: ['desktop', 'mobile'] },

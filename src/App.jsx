@@ -16,6 +16,7 @@ import { noteOn, noteOff } from './audio/engine'
 // VexFlow (pulled in by Identify's Staff renderer) is ~1.1MB on its own —
 // lazy-load so apps that don't touch staff notation never pay for it.
 const Identify = lazy(() => import('./apps/Identify/Identify'))
+const EarTraining = lazy(() => import('./apps/EarTraining/EarTraining'))
 
 export default function App() {
   const [keyboardHeightPx, setKeyboardHeightPx] = useState(220)
@@ -130,6 +131,11 @@ export default function App() {
                 {selectedApp === 'identify' && (
                   <Suspense fallback={<div className="muted" style={{ padding: '2rem' }}>Loading…</div>}>
                     <Identify pressedNotes={pressed} setKeyboardTargetPCs={setKeyboardTargets} />
+                  </Suspense>
+                )}
+                {selectedApp === 'eartraining' && (
+                  <Suspense fallback={<div className="muted" style={{ padding: '2rem' }}>Loading…</div>}>
+                    <EarTraining />
                   </Suspense>
                 )}
                 {!selectedApp && (
