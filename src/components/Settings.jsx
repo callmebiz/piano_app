@@ -1,13 +1,7 @@
 import React, { useEffect, useState } from 'react'
-import { getSynthParams, setSynthParams, SYNTH_DEFAULTS } from '../audio/engine'
+import { getAudioParams, setAudioParams, AUDIO_DEFAULTS } from '../audio/engine'
 import { getStaffSettings, setStaffSettings, STAFF_DEFAULTS } from '../lib/staffSettings'
-
-const WAVEFORM_OPTIONS = [
-  { value: 'sine', label: 'Sine (soft)' },
-  { value: 'triangle', label: 'Triangle (warm)' },
-  { value: 'sawtooth', label: 'Sawtooth (bright/buzzy)' },
-  { value: 'square', label: 'Square (hollow)' }
-]
+import { getProgressionSettings, setProgressionSettings, PROGRESSION_DEFAULTS } from '../lib/progressionSettings'
 
 export default function Settings({ open = false, onClose = () => {}, app = '', shrinkOn = false }) {
   const DEFAULT_WHITE = 40
@@ -40,13 +34,17 @@ export default function Settings({ open = false, onClose = () => {}, app = '', s
     try { return localStorage.getItem('visualizer:colorsLocked') === '1' } catch(e) { return true }
   })
 
-  const [synth, setSynth] = useState(() => getSynthParams())
-  const updateSynth = (partial) => setSynth(setSynthParams(partial))
-  const resetSynth = () => setSynth(setSynthParams(SYNTH_DEFAULTS))
+  const [audio, setAudio] = useState(() => getAudioParams())
+  const updateAudio = (partial) => setAudio(setAudioParams(partial))
+  const resetAudio = () => setAudio(setAudioParams(AUDIO_DEFAULTS))
 
   const [staff, setStaff] = useState(() => getStaffSettings())
   const updateStaff = (partial) => setStaff(setStaffSettings(partial))
   const resetStaff = () => setStaff(setStaffSettings(STAFF_DEFAULTS))
+
+  const [progression, setProgression] = useState(() => getProgressionSettings())
+  const updateProgression = (partial) => setProgression(setProgressionSettings(partial))
+  const resetProgression = () => setProgression(setProgressionSettings(PROGRESSION_DEFAULTS))
 
   useEffect(() => {
     // apply initial values to CSS variables on mount
@@ -183,77 +181,20 @@ export default function Settings({ open = false, onClose = () => {}, app = '', s
             <div style={{fontWeight:700, color:'var(--accent)'}}>Sound</div>
             <div style={{display:'flex', gap:8, alignItems:'center'}}>
               <label style={{fontSize:12,display:'flex',alignItems:'center',gap:6}}>
-                <input type="checkbox" checked={!!synth.muted} onChange={e => updateSynth({ muted: e.target.checked })} />
+                <input type="checkbox" checked={!!audio.muted} onChange={e => updateAudio({ muted: e.target.checked })} />
                 Mute
               </label>
-              <button onClick={resetSynth} title="Reset sound to defaults" style={{padding:'6px 10px',borderRadius:6,border:'1px solid rgba(255,255,255,0.06)',background:'transparent',color:'var(--muted)'}}>Reset sound</button>
+              <button onClick={resetAudio} title="Reset sound to defaults" style={{padding:'6px 10px',borderRadius:6,border:'1px solid rgba(255,255,255,0.06)',background:'transparent',color:'var(--muted)'}}>Reset sound</button>
             </div>
           </div>
 
           <div style={{fontWeight:600}}>Master volume</div>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
-            <input type="range" min={0} max={100} value={Math.round(synth.masterVolume * 100)} onChange={e => updateSynth({ masterVolume: Number(e.target.value) / 100 })} style={{flex:1, minWidth:0}} />
-            <div style={{width:40,textAlign:'right',fontSize:12}}>{Math.round(synth.masterVolume * 100)}%</div>
+            <input type="range" min={0} max={100} value={Math.round(audio.masterVolume * 100)} onChange={e => updateAudio({ masterVolume: Number(e.target.value) / 100 })} style={{flex:1, minWidth:0}} />
+            <div style={{width:40,textAlign:'right',fontSize:12}}>{Math.round(audio.masterVolume * 100)}%</div>
           </div>
 
-          <div style={{fontWeight:600}}>Sound source</div>
-          <div style={{display:'flex',gap:8}}>
-            {[{ value: 'piano', label: 'Piano (real)' }, { value: 'synth', label: 'Synth' }].map(o => (
-              <button
-                key={o.value}
-                onClick={() => updateSynth({ soundSource: o.value })}
-                style={{
-                  padding:'6px 10px',borderRadius:6,cursor:'pointer',
-                  border: synth.soundSource === o.value ? '1px solid transparent' : '1px solid rgba(255,255,255,0.06)',
-                  background: synth.soundSource === o.value ? 'var(--accent)' : 'transparent',
-                  color: synth.soundSource === o.value ? '#071025' : 'var(--muted)'
-                }}
-              >
-                {o.label}
-              </button>
-            ))}
-          </div>
-
-          {synth.soundSource === 'piano' ? (
-            <div style={{gridColumn:'1 / -1', fontSize:12, opacity:0.7}}>Sampled Steinway grand piano. Samples load the first time you play a note and are cached in the browser afterward, so it works offline from then on.</div>
-          ) : (
-            <>
-              <div style={{fontWeight:600}}>Waveform</div>
-              <select value={synth.waveform} onChange={e => updateSynth({ waveform: e.target.value })} style={{background:'transparent',border:'1px solid rgba(255,255,255,0.06)',color:'var(--muted)',padding:'6px 8px',borderRadius:6}}>
-                {WAVEFORM_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-
-              <div style={{fontWeight:600}}>Attack (ms)</div>
-              <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                <input type="range" min={0} max={200} value={synth.attackMs} onChange={e => updateSynth({ attackMs: Number(e.target.value) })} style={{flex:1, minWidth:0}} />
-                <div style={{width:40,textAlign:'right',fontSize:12}}>{synth.attackMs}</div>
-              </div>
-
-              <div style={{fontWeight:600}}>Decay (ms)</div>
-              <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                <input type="range" min={20} max={2000} value={synth.decayMs} onChange={e => updateSynth({ decayMs: Number(e.target.value) })} style={{flex:1, minWidth:0}} />
-                <div style={{width:40,textAlign:'right',fontSize:12}}>{synth.decayMs}</div>
-              </div>
-
-              <div style={{fontWeight:600}}>Sustain</div>
-              <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                <input type="range" min={0} max={100} value={Math.round(synth.sustain * 100)} onChange={e => updateSynth({ sustain: Number(e.target.value) / 100 })} style={{flex:1, minWidth:0}} />
-                <div style={{width:40,textAlign:'right',fontSize:12}}>{Math.round(synth.sustain * 100)}%</div>
-              </div>
-
-              <div style={{fontWeight:600}}>Release (ms)</div>
-              <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                <input type="range" min={20} max={2000} value={synth.releaseMs} onChange={e => updateSynth({ releaseMs: Number(e.target.value) })} style={{flex:1, minWidth:0}} />
-                <div style={{width:40,textAlign:'right',fontSize:12}}>{synth.releaseMs}</div>
-              </div>
-
-              <div style={{fontWeight:600}}>Brightness</div>
-              <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                <input type="range" min={0} max={100} value={synth.brightness} onChange={e => updateSynth({ brightness: Number(e.target.value) })} style={{flex:1, minWidth:0}} />
-                <div style={{width:40,textAlign:'right',fontSize:12}}>{synth.brightness}</div>
-              </div>
-            </>
-          )}
+          <div style={{gridColumn:'1 / -1', fontSize:12, opacity:0.7}}>Sampled Steinway grand piano. Samples load the first time you play a note and are cached in the browser afterward, so it works offline from then on.</div>
 
           {app === 'identify' && (
             <>
@@ -290,6 +231,21 @@ export default function Settings({ open = false, onClose = () => {}, app = '', s
                     {a}
                   </button>
                 ))}
+              </div>
+            </>
+          )}
+
+          {app === 'keycenter' && (
+            <>
+              <div style={{gridColumn:'1 / -1', marginTop:10, paddingTop:10, borderTop:'1px solid rgba(255,255,255,0.06)', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                <div style={{fontWeight:700, color:'var(--accent)'}}>Example Progression</div>
+                <button onClick={resetProgression} title="Reset progression playback to defaults" style={{padding:'6px 10px',borderRadius:6,border:'1px solid rgba(255,255,255,0.06)',background:'transparent',color:'var(--muted)'}}>Reset</button>
+              </div>
+
+              <div style={{fontWeight:600}}>Playback strength</div>
+              <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                <input type="range" min={10} max={100} value={Math.round(progression.velocity * 100)} onChange={e => updateProgression({ velocity: Number(e.target.value) / 100 })} style={{flex:1, minWidth:0}} />
+                <div style={{width:40,textAlign:'right',fontSize:12}}>{Math.round(progression.velocity * 100)}%</div>
               </div>
             </>
           )}

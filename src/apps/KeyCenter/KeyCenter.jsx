@@ -6,6 +6,7 @@ import {
 } from '../../lib/harmony'
 import { chordFormulas, formatMatch, intervalName, recognize } from '../../lib/chords'
 import { playChord } from '../../audio/engine'
+import { useProgressionSettings } from '../../lib/progressionSettings'
 
 // Module-scope so it keeps a stable component identity across KeyCenter's
 // frequent re-renders (this component re-renders on every pressed-note
@@ -34,6 +35,8 @@ function ChordChip({ active, small, onClick, sub, label, displayName }) {
 }
 
 export default function KeyCenter({ pressedNotes, setKeyboardTargetPCs = () => {} }) {
+  const progressionSettings = useProgressionSettings()
+
   const loadRoot = () => {
     try { const raw = localStorage.getItem('keycenter:root'); if (raw != null) return Number(raw) } catch (e) {}
     return 0
@@ -166,7 +169,7 @@ export default function KeyCenter({ pressedNotes, setKeyboardTargetPCs = () => {
         const id = setTimeout(() => {
           setActiveChip({ root: c.root, type: c.type, label: c.label })
           setPlayingPos({ bi, ci })
-          playChord(voiceChordNearMiddleC(c.root, c.type), durMs * sustainRatio)
+          playChord(voiceChordNearMiddleC(c.root, c.type), durMs * sustainRatio, progressionSettings.velocity)
         }, elapsed + barElapsed)
         playbackTimersRef.current.push(id)
         barElapsed += durMs
