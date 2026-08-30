@@ -417,8 +417,13 @@ html,body{height:100%;}
 .muted{color:var(--muted);padding:8px}
 
 /* Stats modal styling */
+/* Centered, content-width panel rather than a fixed 80px-inset box that
+   stretches edge-to-edge on a wide monitor — the content (labels, bars,
+   numbers) has a natural width well under that, so stretching it just
+   spread everything out with a lot of dead space instead of scaling it. */
 .stats-modal{
-  position:fixed;left:80px;top:80px;right:80px;bottom:80px;
+  position:fixed;left:50%;top:80px;bottom:80px;transform:translateX(-50%);
+  width:min(1100px, calc(100vw - 160px));
   background-color: #071025; /* fully opaque dark background */
   color: #e6eef6;
   padding:20px;border-radius:12px;overflow:auto;z-index:1400;

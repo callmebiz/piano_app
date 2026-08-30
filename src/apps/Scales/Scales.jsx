@@ -224,7 +224,7 @@ export default function Scales({ pressedNotes, setKeyboardTargetPCs = () => {} }
       buckets: [
         { key: `type:${t}`, label: scaleLongNames[t], dimension: 'Scale Type' },
         { key: `root:${r}`, label: ROOTS[r], dimension: 'Root' },
-        { key: scaleKey, label: scaleDisplayName(r, t), parent: `root:${r}` }
+        { key: scaleKey, label: scaleDisplayName(r, t), parent: [`root:${r}`, `type:${t}`] }
       ],
       correct,
       timeMs,

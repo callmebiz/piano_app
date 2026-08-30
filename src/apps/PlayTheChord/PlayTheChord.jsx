@@ -506,7 +506,7 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
       buckets: [
         { key: `type:${t}`, label: fm.longName, dimension: 'Chord Type' },
         { key: `root:${r}`, label: ROOTS[r], dimension: 'Root' },
-        { key: chordKey, label: fm.displayName, parent: `root:${r}` }
+        { key: chordKey, label: fm.displayName, parent: [`root:${r}`, `type:${t}`] }
       ],
       correct,
       timeMs,

@@ -5,9 +5,12 @@
 //   one per prompt for Identify, or type/root/chord for Play The Chord) —
 //   { attempts, correct, totalTimeMs, label, parent }, never pruned, so
 //   all-time totals stay exact forever. `parent` (optional) is another
-//   bucket key this one belongs under — a simple one-level tree that
-//   powers drill-down (e.g. a "root:2" bucket is the parent of every
-//   "chord:*@2" bucket, so clicking D can show every D-rooted chord type).
+//   bucket key — or an array of them — this one belongs under; a simple
+//   one-level tree that powers drill-down (e.g. a "root:2" bucket is the
+//   parent of every "chord:*@2" bucket, so clicking D can show every
+//   D-rooted chord type). A bucket with two parents (e.g. Play The Chord's
+//   "chord:min7@2" under both "root:2" and "type:min7") shows up under
+//   each dimension's own breakdown at once instead of only one.
 // - A transition table keyed by "fromKey→toKey", tracking how attempts on
 //   one specific item go when it's reached right after another specific
 //   item (e.g. "time to correctly play C6 having just played G5"). Callers
@@ -176,10 +179,11 @@ export function getLifetimeStats(exercise) {
   return out
 }
 
-// Buckets whose `parent` points at parentKey — the one-level drill-down.
+// Buckets whose `parent` points at parentKey (directly, or as one entry of
+// a multi-parent array) — the one-level drill-down.
 export function getChildren(exercise, parentKey) {
   const all = getLifetimeStats(exercise)
-  return Object.values(all).filter((b) => b.parent === parentKey)
+  return Object.values(all).filter((b) => (Array.isArray(b.parent) ? b.parent.includes(parentKey) : b.parent === parentKey))
 }
 
 // Transitions landing on / leaving a specific item's primaryKey. Pass

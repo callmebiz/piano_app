@@ -41,20 +41,25 @@ function Kpi({ label, value, sub }) {
 }
 
 // Shared stats dashboard for every exercise app (Identify's 5 exercises,
-// Play The Chord): headline KPI cards, a daily accuracy trend, and a
-// selectable breakdown list. Buckets sharing a `dimension` (e.g. Play The
-// Chord's "Root" vs "Chord Type") render as separate tabs instead of one
-// mixed list. Clicking any row selects it — the KPI cards above switch to
-// that item's own numbers, and the row expands into its children (if it
-// has any, e.g. a root's specific chords) or its incoming transition
-// timing (if it's a leaf — "how fast/accurate is this right after X").
-// All driven by lib/practiceStats.js.
+// Ear Training's 4, Play The Chord, Scales): headline KPI cards, a daily
+// accuracy trend, and a breakdown list. Buckets sharing a `dimension` (e.g.
+// Play The Chord's "Root" vs "Chord Type") render as their own section, all
+// shown at once — not one dimension at a time behind a tab, so e.g. a
+// chord's type and root breakdowns are both visible together without
+// clicking anything. Clicking any row selects it — the KPI cards above
+// switch to that item's own numbers, and the row expands into its children
+// (if it has any — a bucket can belong under more than one parent, so e.g.
+// a specific chord shows up as a child under both its Root's and its Chord
+// Type's section) or its incoming transition timing (if it's a true leaf —
+// "how fast/accurate is this right after X"). All driven by lib/practiceStats.js.
 export default function StatsModal({ exercise, title, open, onClose = () => {} }) {
   const [sortKey, setSortKey] = useState('accuracy')
   const [sortDir, setSortDir] = useState('asc') // weakest items first by default
-  const [activeDimension, setActiveDimension] = useState(null)
   const [selectedKey, setSelectedKey] = useState(null)
-  const [showAll, setShowAll] = useState(false)
+  // Keyed by section id ('flat', or a dimension name like 'Chord Type') —
+  // each breakdown expands independently since they're all shown at once
+  // now, not one-at-a-time behind a tab.
+  const [expandedSections, setExpandedSections] = useState({})
   // Bumped on Reset so the memoized reads below re-run against the cleared store.
   const [refreshSeq, setRefreshSeq] = useState(0)
 
@@ -72,10 +77,20 @@ export default function StatsModal({ exercise, title, open, onClose = () => {} }
 
   const topRows = allRows.filter((r) => !r.parent)
   const dimensions = Array.from(new Set(topRows.map((r) => r.dimension).filter(Boolean)))
-  const dimension = dimensions.length > 1 ? (activeDimension && dimensions.includes(activeDimension) ? activeDimension : dimensions[0]) : null
-  const listRows = dimension ? topRows.filter((r) => r.dimension === dimension) : topRows
-  const childrenOf = (key) => allRows.filter((r) => r.parent === key)
+  // A bucket can belong under more than one parent (e.g. Play The Chord's
+  // "chord:min7@2" sits under both "root:2" and "type:min7"), so a leaf
+  // shows up correctly under every dimension's own breakdown at once,
+  // instead of only whichever one happened to "win" a single-parent slot.
+  const childrenOf = (key) => allRows.filter((r) => (Array.isArray(r.parent) ? r.parent.includes(key) : r.parent === key))
   const rowByKey = (key) => allRows.find((r) => r.key === key) || null
+  // One section per dimension (Chord Type, Root, …), shown together rather
+  // than behind a tab switcher — or, when there's no dimension split at
+  // all (Identify, Ear Training), a single flat section.
+  const sections = dimensions.length > 0
+    ? dimensions.map((d) => ({ id: d, title: d, rows: topRows.filter((r) => r.dimension === d) }))
+    : [{ id: 'flat', title: null, rows: topRows }]
+  const isExpanded = (id) => !!expandedSections[id]
+  const toggleExpanded = (id) => setExpandedSections((s) => ({ ...s, [id]: !s[id] }))
 
   const toggleSort = (key) => {
     if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
@@ -151,9 +166,6 @@ export default function StatsModal({ exercise, title, open, onClose = () => {} }
     )
   }
 
-  const sortedList = sortRows(listRows, sortKey, sortDir)
-  const visibleList = showAll ? sortedList : sortedList.slice(0, COLLAPSED_ROWS)
-
   return (
     <div className="stats-modal">
       <h3>{title} — Stats</h3>
@@ -178,52 +190,72 @@ export default function StatsModal({ exercise, title, open, onClose = () => {} }
 
       <div style={{ marginBottom: 22 }}>
         <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Accuracy — last {TREND_DAYS} days</div>
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 60, borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: 2 }}>
-          {trend.map((t) => (
-            <div key={t.date} title={`${t.date}: ${t.attempts} attempt${t.attempts === 1 ? '' : 's'}${t.accuracy != null ? `, ${Math.round(t.accuracy)}%` : ''}`} style={{ flex: 1, height: '100%', display: 'flex', alignItems: 'flex-end' }}>
-              <div style={{
-                width: '100%',
-                height: t.attempts === 0 ? '2px' : `${Math.max(6, t.accuracy)}%`,
-                background: t.attempts === 0 ? 'rgba(255,255,255,0.12)' : accuracyColor(t.accuracy),
-                opacity: t.attempts === 0 ? 1 : Math.max(0.4, t.attempts / maxAttemptsInTrend),
-                borderRadius: 2
-              }} />
+        <div style={{ display: 'flex', gap: 8 }}>
+          {/* Y-axis — without it, a chart of mostly-empty days (no attempts
+              that day) reads as ambiguous: is a tall bar 100% or just "some"? */}
+          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', width: 28, height: 60, flexShrink: 0, fontSize: 9, color: 'var(--muted)', opacity: 0.6, textAlign: 'right' }}>
+            <span>100%</span>
+            <span>50%</span>
+            <span>0%</span>
+          </div>
+          <div style={{ flex: 1, position: 'relative', height: 60 }}>
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', pointerEvents: 'none' }}>
+              <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }} />
+              <div style={{ borderTop: '1px dashed rgba(255,255,255,0.08)' }} />
+              <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)' }} />
             </div>
-          ))}
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: '100%', position: 'relative' }}>
+              {trend.map((t) => (
+                <div key={t.date} title={`${t.date}: ${t.attempts} attempt${t.attempts === 1 ? '' : 's'}${t.accuracy != null ? `, ${Math.round(t.accuracy)}%` : ''}`} style={{ flex: 1, height: '100%', display: 'flex', alignItems: 'flex-end' }}>
+                  <div style={{
+                    width: '100%',
+                    height: t.attempts === 0 ? '2px' : `${Math.max(6, t.accuracy)}%`,
+                    background: t.attempts === 0 ? 'rgba(255,255,255,0.12)' : accuracyColor(t.accuracy),
+                    opacity: t.attempts === 0 ? 1 : Math.max(0.4, t.attempts / maxAttemptsInTrend),
+                    borderRadius: 2
+                  }} />
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--muted)', opacity: 0.6, marginTop: 3 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--muted)', opacity: 0.6, marginTop: 3, paddingLeft: 36 }}>
           <span>{trend[0]?.date}</span>
           <span>{trend[trend.length - 1]?.date}</span>
         </div>
       </div>
 
-      {dimensions.length > 1 && (
-        <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-          {dimensions.map((d) => (
-            <button key={d} className={`play-cat-btn ${dimension === d ? 'active' : ''}`} onClick={() => { setActiveDimension(d); setSelectedKey(null); setShowAll(false) }}>{d}</button>
-          ))}
-        </div>
-      )}
+      {/* Breakdown — every dimension (Chord Type, Root, …) shown as its own
+          section at once, instead of switching between them one at a time. */}
+      {sections.map((sec) => {
+        const sorted = sortRows(sec.rows, sortKey, sortDir)
+        const expanded = isExpanded(sec.id)
+        const visible = expanded ? sorted : sorted.slice(0, COLLAPSED_ROWS)
+        return (
+          <div key={sec.id} style={{ marginBottom: 24 }}>
+            {sec.title && <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>{sec.title}</div>}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 8px', marginBottom: 4, fontSize: 11, color: 'var(--muted)' }}>
+              <div style={{ width: 12 }} />
+              <button className={`sortable-header ${sortKey === 'label' ? 'active' : ''}`} onClick={() => toggleSort('label')} style={headerBtnStyle(130)}>Item {sortIndicator('label')}</button>
+              <button className={`sortable-header ${sortKey === 'accuracy' ? 'active' : ''}`} onClick={() => toggleSort('accuracy')} style={{ ...headerBtnStyle(null), flex: 1 }}>Accuracy {sortIndicator('accuracy')}</button>
+              <div style={{ width: 82 }} />
+              <button className={`sortable-header ${sortKey === 'avgTimeMs' ? 'active' : ''}`} onClick={() => toggleSort('avgTimeMs')} style={headerBtnStyle(60)}>Speed {sortIndicator('avgTimeMs')}</button>
+            </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 8px', marginBottom: 4, fontSize: 11, color: 'var(--muted)' }}>
-        <div style={{ width: 12 }} />
-        <button className={`sortable-header ${sortKey === 'label' ? 'active' : ''}`} onClick={() => toggleSort('label')} style={headerBtnStyle(dimension ? 130 : 130)}>Item {sortIndicator('label')}</button>
-        <button className={`sortable-header ${sortKey === 'accuracy' ? 'active' : ''}`} onClick={() => toggleSort('accuracy')} style={{ ...headerBtnStyle(null), flex: 1 }}>Accuracy {sortIndicator('accuracy')}</button>
-        <div style={{ width: 82 }} />
-        <button className={`sortable-header ${sortKey === 'avgTimeMs' ? 'active' : ''}`} onClick={() => toggleSort('avgTimeMs')} style={headerBtnStyle(60)}>Speed {sortIndicator('avgTimeMs')}</button>
-      </div>
+            {sorted.length === 0 ? (
+              <div className="muted" style={{ padding: 8 }}>No data yet</div>
+            ) : (
+              <div>{visible.map((r) => renderRow(r, 0))}</div>
+            )}
 
-      {listRows.length === 0 ? (
-        <div className="muted" style={{ padding: 8 }}>No data yet</div>
-      ) : (
-        <div>{visibleList.map((r) => renderRow(r, 0))}</div>
-      )}
-
-      {sortedList.length > COLLAPSED_ROWS && (
-        <button className="play-cat-btn" style={{ marginTop: 8 }} onClick={() => setShowAll((v) => !v)}>
-          {showAll ? 'Show less' : `Show all ${sortedList.length}`}
-        </button>
-      )}
+            {sorted.length > COLLAPSED_ROWS && (
+              <button className="play-cat-btn" style={{ marginTop: 8 }} onClick={() => toggleExpanded(sec.id)}>
+                {expanded ? 'Show less' : `Show all ${sorted.length}`}
+              </button>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
