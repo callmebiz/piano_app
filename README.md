@@ -1,14 +1,26 @@
-# Piano App — MIDI Demo
+# Piano App
 
-A simple piano-practice web app demonstrating Web MIDI input and chord recognition.
+A piano practice/theory web app: a visual 88-key keyboard driven by Web MIDI (or click/touch), and six apps built around it.
 
-Overview
-- Visual 88-key keyboard (MIDI notes 21–108). Keys respond to your MIDI keyboard and are clickable/touchable.
-- Left-side Apps pane — currently includes the Chord Recognition app.
-- Chord Recognition shows a single prominent match (short name and long description), a fixed grid of chord intervals and which tones are present, and up to five alternative interpretations.
-- Light / Dark theme toggle and a resizable, docked piano panel.
+## Apps
 
-Quick start
+- **Identification** — quiz-style ID practice: Note, Key Signature, Interval, Scale, and Chord ID, each with its own options (clef, accidentals, distance-only intervals, etc.) and a Stats view (accuracy, speed, drill-down, streaks).
+- **Chord Recognition** — live "what am I playing" — shows the best-matching chord for whatever's currently held down, plus alternative interpretations.
+- **Play The Chord** — practice striking a shown chord correctly: adjustable hold-time, inversions, chord-type/root filters, and Stats.
+- **Scales** — practice scale runs in order (1-4 octaves, ascending/descending, one or two hands), with the scale shown on a staff that lights up as you play it, and Stats.
+- **Key Center** — diatonic chords plus every non-diatonic strand from *creative_chord_choices.txt*: secondary dominants, modal interchange, ii-V's, tritone subs, diminished approach chords, and V-chord alternatives. Generates example chord progressions and plays them back.
+- **Visualizer** — piano-roll-style bars that travel up from whichever keys you play.
+
+Stats (Identification, Play The Chord, Scales) share one engine (`src/lib/practiceStats.js`): lifetime accuracy/speed per item, a 14-day trend, streaks, drill-down (e.g. a chord root's specific chord-type breakdown), and transition timing (how fast/accurate one specific item goes right after another).
+
+Light / Dark theme toggle, a resizable docked keyboard, and a Settings panel (master volume/mute, key width, per-app options like staff size or visualizer color).
+
+## Audio
+
+Real sampled piano playback (Steinway grand, 4 velocity layers) via [smplr](https://github.com/danigb/smplr)'s `SplendidGrandPiano`, driven through `src/audio/engine.js`. Samples load the first time you play a note and are cached in the browser (Cache API) afterward, so it works fully offline from then on. Real MIDI keyboard input passes through its own velocity; on-screen/mouse clicks use a shared default.
+
+## Quick start
+
 1. Open a terminal in the project folder:
 
 ```cmd
@@ -20,16 +32,15 @@ cd /d e:\Projects\piano_app
 npm install
 npm run dev
 ```
-3. Open the local URL printed by Vite (usually `http://localhost:5173`) in Chrome or Edge and allow MIDI access when prompted.
+3. Open the local URL printed by Vite (usually `http://localhost:5173`) in Chrome or Edge. Allow MIDI access when prompted if you're using a MIDI keyboard; the on-screen keyboard works either way.
 
 Notes
-- Audio is a built-in synthesized-tone engine (`src/audio/engine.js`, Web Audio API) — tunable in Settings (waveform, ADSR, brightness, volume). No sample library involved.
 - Chord recognition is interval-based and prioritizes matches that include all pressed notes, falling back to the best partial matches.
 - If your MIDI device does not appear, check the connection and browser permissions.
 
 ## Android (Capacitor)
 
-The app ships to Android as a sideloaded APK via [Capacitor](https://capacitorjs.com/) — no server, no Play Store, works fully offline. `capacitor.config.json` points Capacitor at Vite's `dist/` build output; the native project lives in `android/` (source/config is committed, build outputs are gitignored).
+The app ships to Android as a sideloaded APK via [Capacitor](https://capacitorjs.com/) — no server, no Play Store, works fully offline (aside from the piano's one-time sample download — see Audio above; capacitorjs.com hosts nothing for it). `capacitor.config.json` points Capacitor at Vite's `dist/` build output; the native project lives in `android/` (source/config is committed, build outputs are gitignored).
 
 **Prerequisites**: Node ≥22 (Capacitor CLI requirement) and Android Studio / the Android SDK installed locally.
 
@@ -47,5 +58,3 @@ App icon/splash source SVGs live in `assets/` (`icon-only`, `icon-foreground`, `
 ```cmd
 npx capacitor-assets generate --android
 ```
-
-If you want help expanding the app (more apps, animations, or accessibility improvements), tell me what you'd like next.

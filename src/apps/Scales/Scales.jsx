@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState, useRef, Suspense, lazy } from 'rea
 import { SCALE_TYPES, scaleLongNames, buildScaleSequence, buildTwoHandSequence, buildDegreeLabels, buildScaleSpelling, scaleDisplayName, ROOTS, MAX_OCTAVES } from '../../lib/scales'
 import useHoldToSkip from '../../hooks/useHoldToSkip'
 import { useStaffSettings } from '../../lib/staffSettings'
+import { recordAttempt } from '../../lib/practiceStats'
+import StatsModal from '../../components/StatsModal'
 
 // Staff.jsx pulls in VexFlow (~1.1MB) — Scales isn't lazy-loaded at the
 // App.jsx level (unlike Identify), so a plain top-level import here would
@@ -128,64 +130,12 @@ export default function Scales({ pressedNotes, setKeyboardTargetPCs = () => {} }
   const [stepIndex, setStepIndex] = useState(0)
   const [pendingNext, setPendingNext] = useState(null)
 
-  const [stats, setStats] = useState(() => {
-    try { const raw = localStorage.getItem('scales:stats'); if (raw) return JSON.parse(raw) } catch (e) {}
-    return { byType: {}, byRoot: {}, byScale: {} }
-  })
   const loadTrackStats = () => {
     try { const raw = localStorage.getItem('scales:trackStats'); if (raw) return JSON.parse(raw) } catch (e) {}
     return false
   }
   const [trackStats, setTrackStats] = useState(loadTrackStats)
   useEffect(() => { try { localStorage.setItem('scales:trackStats', JSON.stringify(trackStats)) } catch (e) {} }, [trackStats])
-
-  // Stats modal independent filters
-  const loadStatsTypes = () => {
-    try {
-      const raw = localStorage.getItem('scales:stats:types')
-      if (!raw) return loadTypes()
-      const parsed = JSON.parse(raw)
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        const out = {}
-        let seenAny = false
-        for (const k of SCALE_TYPES) {
-          if (Object.prototype.hasOwnProperty.call(parsed, k)) { out[k] = !!parsed[k]; seenAny = true }
-        }
-        if (seenAny) return out
-      }
-    } catch (e) {}
-    return loadTypes()
-  }
-  const [statsSelectedTypes, setStatsSelectedTypes] = useState(loadStatsTypes)
-  useEffect(() => { try { localStorage.setItem('scales:stats:types', JSON.stringify(statsSelectedTypes)) } catch (e) {} }, [statsSelectedTypes])
-
-  const loadStatsRoots = () => {
-    try {
-      const raw = localStorage.getItem('scales:stats:roots')
-      if (!raw) return loadRoots()
-      const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed)) {
-        const sel = new Set()
-        for (const v of parsed) { const n = Number(v); if (!Number.isNaN(n) && n >= 0 && n < 12) sel.add(n) }
-        if (sel.size > 0) return sel
-      }
-    } catch (e) {}
-    return loadRoots()
-  }
-  const [statsSelectedRoots, setStatsSelectedRoots] = useState(loadStatsRoots)
-  useEffect(() => { try { localStorage.setItem('scales:stats:roots', JSON.stringify(Array.from(statsSelectedRoots))) } catch (e) {} }, [statsSelectedRoots])
-
-  const selectAllStatsTypes = () => { const out = {}; for (const k of SCALE_TYPES) out[k] = true; setStatsSelectedTypes(out) }
-  const clearAllStatsTypes = () => { const out = {}; for (const k of SCALE_TYPES) out[k] = false; setStatsSelectedTypes(out) }
-  const selectAllStatsRoots = () => setStatsSelectedRoots(new Set(Array.from({ length: 12 }, (_, i) => i)))
-  const clearAllStatsRoots = () => setStatsSelectedRoots(new Set())
-
-  const [statsSortKey, setStatsSortKey] = useState('attempts')
-  const [statsSortDir, setStatsSortDir] = useState('desc')
-  const toggleStatsSort = (key) => {
-    if (statsSortKey === key) setStatsSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setStatsSortKey(key); setStatsSortDir('desc') }
-  }
 
   const countdownRef = useRef(null)
 
@@ -259,32 +209,29 @@ export default function Scales({ pressedNotes, setKeyboardTargetPCs = () => {} }
     }
   }, [trackStats])
 
-  const saveStats = (s) => {
-    try { localStorage.setItem('scales:stats', JSON.stringify(s)) } catch (e) {}
-    setStats(s)
-  }
-  const resetStats = () => saveStats({ byType: {}, byRoot: {}, byScale: {} })
+  // Which specific scale (type@root) the previous tracked round was —
+  // powers transition timing ("how fast after X do I get Y").
+  const lastScaleKeyRef = useRef(null)
 
   const recordRound = (combo, correct, timeMs) => {
     if (!combo) return
     if (!trackStats) return
-    let base = { byType: {}, byRoot: {}, byScale: {} }
-    try { const raw = localStorage.getItem('scales:stats'); if (raw) base = JSON.parse(raw) } catch (e) {}
-    const s = JSON.parse(JSON.stringify(base))
     const t = combo.type
-    if (!s.byType[t]) s.byType[t] = { attempts: 0, correct: 0, totalTimeMs: 0 }
-    s.byType[t].attempts += 1
-    if (correct) { s.byType[t].correct += 1; s.byType[t].totalTimeMs += (timeMs || 0) }
-    const r = String(combo.root)
-    if (!s.byRoot[r]) s.byRoot[r] = { attempts: 0, correct: 0, totalTimeMs: 0 }
-    s.byRoot[r].attempts += 1
-    if (correct) { s.byRoot[r].correct += 1; s.byRoot[r].totalTimeMs += (timeMs || 0) }
-    const key = `${t}@${r}`
-    if (!s.byScale) s.byScale = {}
-    if (!s.byScale[key]) s.byScale[key] = { attempts: 0, correct: 0, totalTimeMs: 0, type: t, root: Number(r) }
-    s.byScale[key].attempts += 1
-    if (correct) { s.byScale[key].correct += 1; s.byScale[key].totalTimeMs += (timeMs || 0) }
-    saveStats(s)
+    const r = combo.root
+    const scaleKey = `scale:${t}@${r}`
+    recordAttempt({
+      exercise: 'scales',
+      buckets: [
+        { key: `type:${t}`, label: scaleLongNames[t], dimension: 'Scale Type' },
+        { key: `root:${r}`, label: ROOTS[r], dimension: 'Root' },
+        { key: scaleKey, label: scaleDisplayName(r, t), parent: `root:${r}` }
+      ],
+      correct,
+      timeMs,
+      primaryKey: scaleKey,
+      fromKey: lastScaleKeyRef.current
+    })
+    lastScaleKeyRef.current = scaleKey
   }
 
   // number of notes currently held (used to know when the player has released everything)
@@ -678,113 +625,7 @@ export default function Scales({ pressedNotes, setKeyboardTargetPCs = () => {} }
         </div>
       </div>
 
-      {showStats ? (
-        <div className="stats-modal">
-          <h3>Scales — Stats</h3>
-          <button className="close-btn" onClick={() => setShowStats(false)}>Close</button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12 }}>
-            <div style={{ marginLeft: 'auto' }}>
-              <button className="primary-btn" onClick={resetStats}>Reset Stats</button>
-              <button className="play-cat-btn" style={{ marginLeft: 8 }} onClick={() => { setStatsSelectedTypes(loadTypes()); setStatsSelectedRoots(loadRoots()) }}>Reset Filters</button>
-            </div>
-          </div>
-
-          <div style={{ marginTop: 12 }}>
-            <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-              <div style={{ minWidth: 320 }}>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-                  <div className="filter-title" style={{ marginRight: 8 }}>Type Filters</div>
-                  <button className="play-cat-btn" onClick={selectAllStatsTypes}>Select All</button>
-                  <button className="play-cat-btn" onClick={clearAllStatsTypes}>Clear All</button>
-                </div>
-                <div className="cats-row" role="toolbar" aria-label="Stats type filters" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {SCALE_TYPES.map(k => (
-                    <button key={`s-${k}`} className={`play-cat-btn ${statsSelectedTypes[k] ? 'active' : ''}`} onClick={() => setStatsSelectedTypes(s => ({ ...s, [k]: !s[k] }))}>
-                      {scaleLongNames[k]}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div style={{ minWidth: 260 }}>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-                  <div className="filter-title" style={{ marginRight: 8 }}>Root Filters</div>
-                  <button className="play-cat-btn" onClick={selectAllStatsRoots}>Select All</button>
-                  <button className="play-cat-btn" onClick={clearAllStatsRoots}>Clear All</button>
-                  <button className="play-cat-btn" onClick={() => setStatsSelectedRoots(new Set([0, 2, 4, 5, 7, 9, 11]))}>Naturals Only</button>
-                </div>
-                <div className="roots" style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
-                  {ROOTS.map((rName, rIdx) => (
-                    <button key={`sr-${rIdx}`} className={`play-root-btn play-cat-btn ${statsSelectedRoots.has(rIdx) ? 'active' : ''}`} onClick={() => {
-                      setStatsSelectedRoots(prev => {
-                        const s = new Set(prev)
-                        if (s.has(rIdx)) s.delete(rIdx); else s.add(rIdx)
-                        return s
-                      })
-                    }}>{rName}</button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <h4 style={{ color: 'var(--muted)', marginTop: 6 }}>Stats</h4>
-            <table className="stats-table" style={{ width: '100%' }}>
-              <thead>
-                <tr>
-                  <th className="sortable" onClick={() => toggleStatsSort('scale')}>Scale {statsSortKey === 'scale' ? (statsSortDir === 'asc' ? '▲' : '▼') : ''}</th>
-                  <th className="sortable" onClick={() => toggleStatsSort('root')}>Root {statsSortKey === 'root' ? (statsSortDir === 'asc' ? '▲' : '▼') : ''}</th>
-                  <th className="sortable" onClick={() => toggleStatsSort('accuracy')}>Accuracy {statsSortKey === 'accuracy' ? (statsSortDir === 'asc' ? '▲' : '▼') : ''}</th>
-                  <th className="sortable" onClick={() => toggleStatsSort('attempts')}>Attempts {statsSortKey === 'attempts' ? (statsSortDir === 'asc' ? '▲' : '▼') : ''}</th>
-                  <th className="sortable" onClick={() => toggleStatsSort('correct')}>Correct {statsSortKey === 'correct' ? (statsSortDir === 'asc' ? '▲' : '▼') : ''}</th>
-                  <th className="sortable" onClick={() => toggleStatsSort('avg')}>Avg Speed (ms) {statsSortKey === 'avg' ? (statsSortDir === 'asc' ? '▲' : '▼') : ''}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(() => {
-                  const entries = Object.entries((stats && stats.byScale) || {})
-                  const rows = []
-                  for (const [key, o] of entries) {
-                    const [t, rStr] = key.split('@')
-                    if (!statsSelectedTypes[t]) continue
-                    const rnum = Number(rStr)
-                    if (statsSelectedRoots && statsSelectedRoots.size > 0 && !statsSelectedRoots.has(rnum)) continue
-                    const name = scaleDisplayName(rnum, t)
-                    const avg = o.correct ? Math.round(o.totalTimeMs / o.correct) : Infinity
-                    const accuracy = o.attempts ? (o.correct / o.attempts) * 100 : 0
-                    rows.push({ key, entry: o, type: t, root: rnum, name, avg, accuracy })
-                  }
-
-                  if (rows.length === 0) return (<tr><td colSpan={6} className="muted">No data</td></tr>)
-
-                  rows.sort((a, b) => {
-                    const dir = statsSortDir === 'asc' ? 1 : -1
-                    switch (statsSortKey) {
-                      case 'scale': return a.name.localeCompare(b.name) * dir
-                      case 'root': return (a.root - b.root) * dir
-                      case 'accuracy': return (a.accuracy - b.accuracy) * dir
-                      case 'attempts': return (a.entry.attempts - b.entry.attempts) * dir
-                      case 'correct': return (a.entry.correct - b.entry.correct) * dir
-                      case 'avg': return (a.avg - b.avg) * dir
-                      default: return 0
-                    }
-                  })
-
-                  return rows.map(r => (
-                    <tr key={r.key} style={{ borderTop: '1px solid rgba(255,255,255,0.03)' }}>
-                      <td style={{ padding: 6, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{r.name}</td>
-                      <td style={{ padding: 6 }}>{ROOTS[r.root]}</td>
-                      <td style={{ padding: 6 }}>{`${r.accuracy.toFixed(1)}% (${r.entry.correct}/${r.entry.attempts})`}</td>
-                      <td style={{ padding: 6 }}>{r.entry.attempts}</td>
-                      <td style={{ padding: 6 }}>{r.entry.correct}</td>
-                      <td style={{ padding: 6 }}>{r.entry.correct ? Math.round(r.entry.totalTimeMs / r.entry.correct) : '—'}</td>
-                    </tr>
-                  ))
-                })()}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      ) : null}
+      <StatsModal exercise="scales" title="Scales" open={showStats} onClose={() => setShowStats(false)} />
     </div>
   )
 }

@@ -67,26 +67,43 @@ function migrateLegacyIfNeeded(store) {
     }
   } catch (e) {}
 
+  // Shared by both legacy shapes below (Play The Chord's byType/byRoot/
+  // byChord and Scales' byType/byRoot/byScale) — same {attempts, correct,
+  // totalTimeMs} groups under different names. `dimension` is set here too
+  // (not just `parent`) so migrated history renders under the right tab
+  // immediately, instead of looking undimensioned/mixed until the next
+  // fresh attempt on that bucket happens to refresh it.
+  const copyLegacyGroup = (target, group, prefix, dimension, parentFn) => {
+    if (!group) return
+    for (const [k, v] of Object.entries(group)) {
+      if (!v) continue
+      target[`${prefix}:${k}`] = { attempts: v.attempts || 0, correct: v.correct || 0, totalTimeMs: v.totalTimeMs || 0, label: k, parent: parentFn ? parentFn(v) : null, dimension: dimension || null }
+    }
+  }
+
   try {
     const raw = localStorage.getItem('play:stats')
     if (raw) {
       const old = JSON.parse(raw)
-      const exercise = 'play'
-      store.lifetime[exercise] = store.lifetime[exercise] || {}
-      const copyGroup = (group, prefix, parentFn) => {
-        if (!group) return
-        for (const [k, v] of Object.entries(group)) {
-          if (!v) continue
-          store.lifetime[exercise][`${prefix}:${k}`] = { attempts: v.attempts || 0, correct: v.correct || 0, totalTimeMs: v.totalTimeMs || 0, label: k, parent: parentFn ? parentFn(v) : null }
-        }
-      }
-      copyGroup(old.byType, 'type')
-      copyGroup(old.byRoot, 'root')
+      store.lifetime.play = store.lifetime.play || {}
+      copyLegacyGroup(store.lifetime.play, old.byType, 'type', 'Chord Type')
+      copyLegacyGroup(store.lifetime.play, old.byRoot, 'root', 'Root')
       // Old byChord entries carried their own root — wire that up as this
       // migrated bucket's parent so drill-down (root -> its chord variants)
       // works on pre-existing history too, not just attempts recorded from
       // now on.
-      copyGroup(old.byChord, 'chord', (v) => (typeof v.root === 'number' ? `root:${v.root}` : null))
+      copyLegacyGroup(store.lifetime.play, old.byChord, 'chord', null, (v) => (typeof v.root === 'number' ? `root:${v.root}` : null))
+    }
+  } catch (e) {}
+
+  try {
+    const raw = localStorage.getItem('scales:stats')
+    if (raw) {
+      const old = JSON.parse(raw)
+      store.lifetime.scales = store.lifetime.scales || {}
+      copyLegacyGroup(store.lifetime.scales, old.byType, 'type', 'Scale Type')
+      copyLegacyGroup(store.lifetime.scales, old.byRoot, 'root', 'Root')
+      copyLegacyGroup(store.lifetime.scales, old.byScale, 'scale', null, (v) => (typeof v.root === 'number' ? `root:${v.root}` : null))
     }
   } catch (e) {}
 
