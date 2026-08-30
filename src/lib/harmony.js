@@ -192,26 +192,31 @@ export function generateProgression(keyRoot, opts = {}) {
   for (let i = 1; i < backbone.length; i++) {
     const deg = backbone[i]
     const target = diatonic[deg]
-    const bar = []
+    let approachChords = []
 
     if (deg === 0) {
       // Resolving back to the tonic — draw from whichever of V Alternatives /
       // the special ii-Vs (that target I) / the plain diatonic V is enabled.
-      const choices = ['plain']
+      // Skip the plain-V option when the previous bar's chord is already the
+      // diatonic V itself — otherwise it shows up twice in a row (V, then V
+      // again as a redundant "approach" to I) instead of resolving directly.
+      const prevDeg = backbone[i - 1]
+      const choices = []
+      if (prevDeg !== 4) choices.push('plain')
       if (useVAlt) choices.push('valt')
       if (useTwoFives) choices.push('special')
       const choice = pick(choices)
       if (choice === 'valt') {
         const alt = pick(vAlternativesChords)
-        bar.push({ root: alt.root, type: alt.type, label: alt.label })
+        approachChords = [{ root: alt.root, type: alt.type, label: alt.label }]
       } else if (choice === 'special') {
         const stf = pick(specialTwoFives.filter((s) => s.targetRoman === 'I'))
-        bar.push({ root: stf.ii.root, type: stf.ii.type, label: 'ii' })
-        bar.push(applyTT(stf.v, 'V'))
-      } else {
+        approachChords = [{ root: stf.ii.root, type: stf.ii.type, label: 'ii' }, applyTT(stf.v, 'V')]
+      } else if (choice === 'plain') {
         const v5 = diatonic[4]
-        bar.push(applyTT({ root: v5.root, type: sevenths ? '7' : v5.type }, 'V'))
+        approachChords = [applyTT({ root: v5.root, type: sevenths ? '7' : v5.type }, 'V')]
       }
+      // choice === null (no options applied and we already just landed on V) — resolve directly, no pickup
     } else {
       // Approaching a non-tonic degree — secondary dominant (optionally
       // preceded by its ii, optionally tritone-subbed) or a diminished
@@ -219,17 +224,29 @@ export function generateProgression(keyRoot, opts = {}) {
       const sd = secondaryDominants.find((s) => s.targetDegree === deg)
       const tf = twoFives.find((s) => s.targetDegree === deg)
       const da = diminishedApproachChords.find((s) => s.targetDegree === deg)
-      const approaches = []
-      if (useSD && sd) approaches.push('sd')
-      if (useDim && da) approaches.push('dim')
-      const choice = pick(approaches)
+      const choices = []
+      if (useSD && sd) choices.push('sd')
+      if (useDim && da) choices.push('dim')
+      const choice = pick(choices)
       if (choice === 'sd') {
-        if (useTwoFives && tf) bar.push({ root: tf.ii.root, type: tf.ii.type, label: 'ii' })
-        bar.push(applyTT(sd, sd.label))
+        approachChords = useTwoFives && tf
+          ? [{ root: tf.ii.root, type: tf.ii.type, label: 'ii' }, applyTT(sd, sd.label)]
+          : [applyTT(sd, sd.label)]
       } else if (choice === 'dim') {
-        bar.push({ root: da.root, type: da.type, label: da.label })
+        approachChords = [{ root: da.root, type: da.type, label: da.label }]
       }
     }
+
+    // Approach chords (however many) land at the END of the bar that's
+    // already in progress — same convention every worked example in
+    // creative_chord_choices.txt uses (|C Gm7 C7 |F |, |C E7 |Am C7 |F D7 |G |,
+    // etc.): the chord(s) leading somewhere never get a bar of their own,
+    // they're a pickup into whatever bar comes next. The target they resolve
+    // to always DOES start a fresh bar — most visibly the final tonic, which
+    // previously ended up sharing (and looking like the tail of) the bar
+    // before it instead of starting its own, like a real chart's last
+    // measure would.
+    if (approachChords.length > 0) bars[bars.length - 1].push(...approachChords)
 
     // Occasionally borrow the target itself from a parallel minor mode
     // instead of using its plain diatonic form.
@@ -238,8 +255,7 @@ export function generateProgression(keyRoot, opts = {}) {
       const swap = modalInterchangeChords.find((m) => m.root === target.root && m.type !== target.type)
       if (swap) targetChord = { root: swap.root, type: swap.type, label: swap.label }
     }
-    bar.push(targetChord)
-    bars.push(bar)
+    bars.push([targetChord])
   }
 
   return bars
