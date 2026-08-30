@@ -196,40 +196,64 @@ export default function Settings({ open = false, onClose = () => {}, app = '', s
             <div style={{width:40,textAlign:'right',fontSize:12}}>{Math.round(synth.masterVolume * 100)}%</div>
           </div>
 
-          <div style={{fontWeight:600}}>Waveform</div>
-          <select value={synth.waveform} onChange={e => updateSynth({ waveform: e.target.value })} style={{background:'transparent',border:'1px solid rgba(255,255,255,0.06)',color:'var(--muted)',padding:'6px 8px',borderRadius:6}}>
-            {WAVEFORM_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-
-          <div style={{fontWeight:600}}>Attack (ms)</div>
-          <div style={{display:'flex',gap:8,alignItems:'center'}}>
-            <input type="range" min={0} max={200} value={synth.attackMs} onChange={e => updateSynth({ attackMs: Number(e.target.value) })} style={{flex:1, minWidth:0}} />
-            <div style={{width:40,textAlign:'right',fontSize:12}}>{synth.attackMs}</div>
+          <div style={{fontWeight:600}}>Sound source</div>
+          <div style={{display:'flex',gap:8}}>
+            {[{ value: 'piano', label: 'Piano (real)' }, { value: 'synth', label: 'Synth' }].map(o => (
+              <button
+                key={o.value}
+                onClick={() => updateSynth({ soundSource: o.value })}
+                style={{
+                  padding:'6px 10px',borderRadius:6,cursor:'pointer',
+                  border: synth.soundSource === o.value ? '1px solid transparent' : '1px solid rgba(255,255,255,0.06)',
+                  background: synth.soundSource === o.value ? 'var(--accent)' : 'transparent',
+                  color: synth.soundSource === o.value ? '#071025' : 'var(--muted)'
+                }}
+              >
+                {o.label}
+              </button>
+            ))}
           </div>
 
-          <div style={{fontWeight:600}}>Decay (ms)</div>
-          <div style={{display:'flex',gap:8,alignItems:'center'}}>
-            <input type="range" min={20} max={2000} value={synth.decayMs} onChange={e => updateSynth({ decayMs: Number(e.target.value) })} style={{flex:1, minWidth:0}} />
-            <div style={{width:40,textAlign:'right',fontSize:12}}>{synth.decayMs}</div>
-          </div>
+          {synth.soundSource === 'piano' ? (
+            <div style={{gridColumn:'1 / -1', fontSize:12, opacity:0.7}}>Sampled Steinway grand piano. Samples load the first time you play a note and are cached in the browser afterward, so it works offline from then on.</div>
+          ) : (
+            <>
+              <div style={{fontWeight:600}}>Waveform</div>
+              <select value={synth.waveform} onChange={e => updateSynth({ waveform: e.target.value })} style={{background:'transparent',border:'1px solid rgba(255,255,255,0.06)',color:'var(--muted)',padding:'6px 8px',borderRadius:6}}>
+                {WAVEFORM_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
 
-          <div style={{fontWeight:600}}>Sustain</div>
-          <div style={{display:'flex',gap:8,alignItems:'center'}}>
-            <input type="range" min={0} max={100} value={Math.round(synth.sustain * 100)} onChange={e => updateSynth({ sustain: Number(e.target.value) / 100 })} style={{flex:1, minWidth:0}} />
-            <div style={{width:40,textAlign:'right',fontSize:12}}>{Math.round(synth.sustain * 100)}%</div>
-          </div>
+              <div style={{fontWeight:600}}>Attack (ms)</div>
+              <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                <input type="range" min={0} max={200} value={synth.attackMs} onChange={e => updateSynth({ attackMs: Number(e.target.value) })} style={{flex:1, minWidth:0}} />
+                <div style={{width:40,textAlign:'right',fontSize:12}}>{synth.attackMs}</div>
+              </div>
 
-          <div style={{fontWeight:600}}>Release (ms)</div>
-          <div style={{display:'flex',gap:8,alignItems:'center'}}>
-            <input type="range" min={20} max={2000} value={synth.releaseMs} onChange={e => updateSynth({ releaseMs: Number(e.target.value) })} style={{flex:1, minWidth:0}} />
-            <div style={{width:40,textAlign:'right',fontSize:12}}>{synth.releaseMs}</div>
-          </div>
+              <div style={{fontWeight:600}}>Decay (ms)</div>
+              <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                <input type="range" min={20} max={2000} value={synth.decayMs} onChange={e => updateSynth({ decayMs: Number(e.target.value) })} style={{flex:1, minWidth:0}} />
+                <div style={{width:40,textAlign:'right',fontSize:12}}>{synth.decayMs}</div>
+              </div>
 
-          <div style={{fontWeight:600}}>Brightness</div>
-          <div style={{display:'flex',gap:8,alignItems:'center'}}>
-            <input type="range" min={0} max={100} value={synth.brightness} onChange={e => updateSynth({ brightness: Number(e.target.value) })} style={{flex:1, minWidth:0}} />
-            <div style={{width:40,textAlign:'right',fontSize:12}}>{synth.brightness}</div>
-          </div>
+              <div style={{fontWeight:600}}>Sustain</div>
+              <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                <input type="range" min={0} max={100} value={Math.round(synth.sustain * 100)} onChange={e => updateSynth({ sustain: Number(e.target.value) / 100 })} style={{flex:1, minWidth:0}} />
+                <div style={{width:40,textAlign:'right',fontSize:12}}>{Math.round(synth.sustain * 100)}%</div>
+              </div>
+
+              <div style={{fontWeight:600}}>Release (ms)</div>
+              <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                <input type="range" min={20} max={2000} value={synth.releaseMs} onChange={e => updateSynth({ releaseMs: Number(e.target.value) })} style={{flex:1, minWidth:0}} />
+                <div style={{width:40,textAlign:'right',fontSize:12}}>{synth.releaseMs}</div>
+              </div>
+
+              <div style={{fontWeight:600}}>Brightness</div>
+              <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                <input type="range" min={0} max={100} value={synth.brightness} onChange={e => updateSynth({ brightness: Number(e.target.value) })} style={{flex:1, minWidth:0}} />
+                <div style={{width:40,textAlign:'right',fontSize:12}}>{synth.brightness}</div>
+              </div>
+            </>
+          )}
 
           {app === 'identify' && (
             <>

@@ -1,15 +1,24 @@
-// Web Audio synth engine.
-// A single shared AudioContext driving a small polyphonic synth: two detuned
-// oscillators per voice through an amplitude envelope (ADSR) and a lowpass
-// filter with its own brightness-decay envelope, summed into a master volume
-// + limiter. Tunable params are persisted as one JSON blob in localStorage.
+// Audio engine.
+// Two interchangeable note sources, both driven through the same shared
+// AudioContext -> master volume -> limiter chain, so mute/volume apply
+// identically regardless of which is active:
+//  - 'piano': real sampled piano (Steinway, 4 velocity layers) via smplr's
+//    SplendidGrandPiano, loaded lazily and cached in the browser (Cache API)
+//    so after the first load it works fully offline.
+//  - 'synth': the original small polyphonic oscillator synth (two detuned
+//    oscillators per voice through an ADSR + lowpass filter) — kept as a
+//    fallback/alternative, e.g. if sample loading fails or is unavailable.
+// Tunable params are persisted as one JSON blob in localStorage.
+
+import { SplendidGrandPiano, CacheStorage } from 'smplr'
 
 const STORAGE_KEY = 'audio:synth'
 
 export const SYNTH_DEFAULTS = {
   muted: false,
   masterVolume: 0.7,
-  waveform: 'triangle', // 'sine' | 'triangle' | 'sawtooth' | 'square'
+  soundSource: 'piano', // 'piano' | 'synth'
+  waveform: 'triangle', // 'sine' | 'triangle' | 'sawtooth' | 'square' — synth mode only
   attackMs: 4,
   decayMs: 300,
   sustain: 0.35, // 0..1, fraction of peak amplitude held while a note is down
@@ -55,10 +64,52 @@ function ensureAudioContext() {
   return ctx
 }
 
-// Warm up the context on the very first user gesture anywhere on the page,
-// so the first real note has as little latency as possible.
+// --- Sampled piano (lazy — created on first use, not at module load) ---
+let piano = null
+const pianoStops = new Map() // midi -> stop() from the last start() on that note
+
+function ensurePiano() {
+  const audioCtx = ensureAudioContext()
+  if (!audioCtx || piano) return piano
+  let storage
+  try { storage = CacheStorage() } catch (e) { storage = undefined } // Cache API unavailable (e.g. non-secure context) — falls back to re-fetching each session
+  try {
+    piano = SplendidGrandPiano(audioCtx, { destination: masterGain, storage })
+  } catch (e) {
+    piano = null
+  }
+  return piano
+}
+
+function pianoNoteOn(midi, velocity) {
+  const p = ensurePiano()
+  if (!p) return false
+  const existingStop = pianoStops.get(midi)
+  if (existingStop) { try { existingStop() } catch (e) {} }
+  const vel = Math.max(1, Math.min(127, Math.round(velocity * 127)))
+  try {
+    const stop = p.start({ note: midi, velocity: vel })
+    pianoStops.set(midi, stop)
+  } catch (e) {}
+  return true
+}
+
+function pianoNoteOff(midi) {
+  const stop = pianoStops.get(midi)
+  if (stop) { try { stop() } catch (e) {} }
+  pianoStops.delete(midi)
+}
+
+// Warm up the context (and start loading piano samples, if that's the active
+// source) on the very first user gesture anywhere on the page, so the first
+// real note has as little latency/missing-sample risk as possible.
 if (typeof window !== 'undefined') {
-  const warmup = () => { ensureAudioContext(); window.removeEventListener('pointerdown', warmup); window.removeEventListener('keydown', warmup) }
+  const warmup = () => {
+    ensureAudioContext()
+    if (params.soundSource === 'piano') ensurePiano()
+    window.removeEventListener('pointerdown', warmup)
+    window.removeEventListener('keydown', warmup)
+  }
   window.addEventListener('pointerdown', warmup, { once: true })
   window.addEventListener('keydown', warmup, { once: true })
 }
@@ -96,6 +147,7 @@ function stealVoice(midi) {
 export function noteOn(midi, velocity = 0.85) {
   const audioCtx = ensureAudioContext()
   if (!audioCtx) return
+  if (params.soundSource === 'piano') { pianoNoteOn(midi, velocity); return }
   if (voices.has(midi)) stealVoice(midi)
 
   const freq = midiToFreq(midi)
@@ -140,7 +192,7 @@ export function noteOn(midi, velocity = 0.85) {
   voices.set(midi, { oscA, oscB, voiceGain, filter, cleanupTimer: null })
 }
 
-export function noteOff(midi) {
+function synthNoteOff(midi) {
   const voice = voices.get(midi)
   if (!voice || !ctx) return
   const now = ctx.currentTime
@@ -154,8 +206,16 @@ export function noteOff(midi) {
   voice.cleanupTimer = setTimeout(() => cleanupVoice(midi, voice), Math.ceil(releaseS * 1000) + 30)
 }
 
+export function noteOff(midi) {
+  if (params.soundSource === 'piano') { pianoNoteOff(midi); return }
+  synthNoteOff(midi)
+}
+
 export function allNotesOff() {
-  for (const midi of Array.from(voices.keys())) noteOff(midi)
+  // Stop everything regardless of the *current* soundSource — notes can
+  // still be ringing from before a live source switch.
+  for (const midi of Array.from(voices.keys())) synthNoteOff(midi)
+  for (const midi of Array.from(pianoStops.keys())) pianoNoteOff(midi)
 }
 
 export function playChord(midis, durationMs = 900) {
@@ -174,5 +234,8 @@ export function setSynthParams(partial) {
   if (masterGain && ctx) {
     try { masterGain.gain.setTargetAtTime(params.muted ? 0 : params.masterVolume, ctx.currentTime, 0.01) } catch (e) {}
   }
+  // Switching to Piano mid-session — start loading samples right away
+  // instead of waiting for the next note.
+  if (partial && partial.soundSource === 'piano' && ctx) ensurePiano()
   return getSynthParams()
 }
