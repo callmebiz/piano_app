@@ -15,7 +15,7 @@ const TABS = [
   { id: 'keysig', title: 'Key Signature', enabled: false }
 ]
 
-export default function Construction() {
+export default function Construction({ pressedNotes }) {
   const [tab, setTab] = useState('note')
 
   return (
@@ -37,7 +37,7 @@ export default function Construction() {
       </div>
 
       {tab === 'note' && <NoteConstruction />}
-      {tab === 'interval' && <IntervalConstruction />}
+      {tab === 'interval' && <IntervalConstruction pressedNotes={pressedNotes} />}
     </div>
   )
 }
