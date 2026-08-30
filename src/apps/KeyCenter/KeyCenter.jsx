@@ -154,12 +154,12 @@ export default function KeyCenter({ pressedNotes, setKeyboardTargetPCs = () => {
     if (!progression || progression.length === 0) return
     stopProgressionPlayback()
     // Each bar is one 4/4 measure. Chords inside it get real note values
-    // (via beatsForBar — quarter/half/whole, never an arbitrary N-way split)
-    // rather than a flat per-chord duration: a bar with just the target gets
-    // a whole note, while a bar holding the previous chord plus the approach
-    // chord(s) leading into the next target splits into a half note for the
-    // held chord and quarter notes for the (shorter, passing-through)
-    // approach chords.
+    // (via beatsForBar) rather than a flat per-chord duration: a bar with
+    // just the target gets a whole note; a bar with the target plus its
+    // lead-in chord(s) into the next bar gives the target most of the bar
+    // and pushes the lead-in(s) short — a straight eighth for one, or a
+    // dotted-quarter-into-an-eighth for two (e.g. a ii-V pickup) — so they
+    // read as a quick approach into what's next, not equal-footing harmony.
     const quarterMs = 400 // one beat — a whole note (single chord filling a bar) is 4x this
     const sustainRatio = 0.85 // leave a small gap before the next attack
     setIsPlayingProgression(true)

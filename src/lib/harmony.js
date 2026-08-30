@@ -302,18 +302,21 @@ export function generateProgression(keyRoot, opts = {}) {
   }
 }
 
-// Assigns each chord in a bar a real note value (in beats, 4/4) instead of
-// splitting the bar evenly N ways — a bar can hold at most 3 chords (the
-// previous target, plus up to a ii and a V), and evenly dividing 4 beats by
-// 3 isn't a quarter/half/whole note at all. A single chord fills the bar
-// (whole note); two share it evenly (half + half); three give the first
-// chord — normally the one already sustaining from the previous bar — a
-// half note, and the two chords passing quickly through afterward a
-// quarter note each (half + quarter + quarter = 4 beats).
+// Assigns each chord in a bar a real note value (in beats, 4/4) — a bar can
+// hold at most 3 chords: the target that just landed (always first, always
+// sustained), then up to a ii and a V leading into the NEXT bar's target.
+// Splitting evenly (half + half, or half + quarter + quarter) put the lead-in
+// chord(s) on equal rhythmic footing with the target, which reads as another
+// harmony in its own right rather than a quick pickup into what's coming —
+// real charts write that pickup short, landing right on the next barline.
+// So: the target always gets whatever's left after its lead-in(s), a lone
+// lead-in is a straight eighth note right at the tail of the bar, and two
+// lead-ins (ii then V) split long-short — dotted quarter into an eighth —
+// same shape a chart would actually swing that pickup with.
 export function beatsForBar(n) {
   if (n <= 1) return [4]
-  if (n === 2) return [2, 2]
-  if (n === 3) return [2, 1, 1]
+  if (n === 2) return [3.5, 0.5]
+  if (n === 3) return [2, 1.5, 0.5]
   return new Array(n).fill(4 / n) // shouldn't happen in practice — even fallback
 }
 
