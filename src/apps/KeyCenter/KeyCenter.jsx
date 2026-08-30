@@ -134,6 +134,12 @@ export default function KeyCenter({ pressedNotes, setKeyboardTargetPCs = () => {
     playbackTimersRef.current = []
     setIsPlayingProgression(false)
     setPlayingPos(null)
+    // activeChip is shared (root/type match) across every chip on the page —
+    // without clearing it here, whichever chord was last sounding stays
+    // "played" and leaks into a freshly-generated progression, lighting up
+    // any chip elsewhere that happens to share its root/type even though
+    // nothing in the new progression has actually been played yet.
+    setActiveChip(null)
   }
   useEffect(() => () => stopProgressionPlayback(), []) // clear any pending timers on unmount
   useEffect(() => { setProgression(null); stopProgressionPlayback() }, [keyRoot]) // eslint-disable-line react-hooks/exhaustive-deps
