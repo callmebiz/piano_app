@@ -3,10 +3,12 @@ import NoteConstruction from './NoteConstruction'
 import IntervalConstruction from './IntervalConstruction'
 
 // Tab shell for "Staff Construction" — the inverse of Identification: given
-// a name, click where it goes on the staff instead of naming what's shown.
-// Same shell pattern as Identify.jsx; Scale/Chord/Key Signature
-// Construction are the natural next tabs (same ClickableStaff mechanism,
-// extended to multi-note placement) but aren't built yet.
+// a name, build it on the staff (move a note up/down by scale steps, pick
+// its accidental) instead of naming what's already shown. Same shell
+// pattern as Identify.jsx; Chord Construction (select one note of a
+// pre-placed chord, then adjust it the same way) and Key Signature
+// Construction (a sharp/flat-count slider instead of a note-position
+// control) are the natural next tabs but aren't built yet.
 const TABS = [
   { id: 'note', title: 'Note', enabled: true },
   { id: 'interval', title: 'Interval', enabled: true },

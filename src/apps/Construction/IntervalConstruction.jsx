@@ -1,13 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import ClickableStaff from '../../components/ClickableStaff'
+import Staff from '../../components/Staff'
 import StatsModal from '../../components/StatsModal'
 import useIdentifyExercise from '../Identify/useIdentifyExercise'
 import { useStaffSettings } from '../../lib/staffSettings'
-import { parseSpelling, spellingMidi, vexKeyFor, buildSpellingPool, ALL_SPELLINGS, CANONICAL_ROOTS } from '../../lib/staffNotes'
+import { parseSpelling, spellingMidi, vexKeyFor, CANONICAL_ROOTS } from '../../lib/staffNotes'
 import { noteFromInterval, isPerfectFamily } from '../../lib/intervals'
+import { diatonicStep, stepToLetterOctave } from '../../lib/staffGeometry'
 
 const ROOT_OCTAVE = 4
 const NUMBERS = [1, 2, 3, 4, 5, 6, 7, 8]
+const STEP_RANGE = 9 // how far up/down from the root the control allows
 
 const QUALITIES = [
   { id: 'A', label: 'Augmented' },
@@ -23,15 +25,15 @@ function combosFor(qualityId) {
   return NUMBERS.filter((n) => n !== 1).map((n) => ({ quality: 'd', number: n }))
 }
 
-// Root shown on the staff; click where the named interval above it goes —
-// the inverse of Interval Identification (two notes shown, name the
-// interval). Reuses the same pool-building as Interval ID.
+// Root shown on the staff; build the named interval above it — the inverse
+// of Interval Identification (two notes shown, name the interval). Reuses
+// the same pool-building as Interval ID.
 function buildPool(enabledQualityIds) {
   const combos = enabledQualityIds.flatMap(combosFor)
   const items = []
   for (let rootPc = 0; rootPc < 12; rootPc++) {
     const { letter, accidental } = parseSpelling(CANONICAL_ROOTS[rootPc])
-    const rootNote = { name: CANONICAL_ROOTS[rootPc], midi: spellingMidi(letter, accidental, ROOT_OCTAVE), vexKey: vexKeyFor(letter, accidental, ROOT_OCTAVE) }
+    const rootNote = { name: CANONICAL_ROOTS[rootPc], midi: spellingMidi(letter, accidental, ROOT_OCTAVE), vexKey: vexKeyFor(letter, accidental, ROOT_OCTAVE), letter }
     for (const { quality, number } of combos) {
       const target = noteFromInterval(letter, accidental, ROOT_OCTAVE, quality, number)
       if (!target) continue
@@ -51,10 +53,10 @@ export default function IntervalConstruction({ pressedNotes }) {
   const [qualities, setQualities] = useState(loadQualities)
   useEffect(() => { try { localStorage.setItem('construct:interval:qualities', JSON.stringify(qualities)) } catch (e) {} }, [qualities])
 
-  // Staff: click where the target goes (exact spelling, like Note
-  // Construction). Keyboard: press the target's key — the specific octave
-  // it's actually written in, not any octave of that pitch class, so this
-  // still tests the real interval shape rather than just the pitch class.
+  // Staff: move the built note up/down + set its accidental. Keyboard:
+  // press the target's key directly — the specific octave it's actually
+  // written in, not any octave of that pitch class, so this still tests
+  // the real interval shape rather than just the pitch class.
   const loadAnswerMode = () => {
     try { const raw = localStorage.getItem('construct:interval:answerMode'); if (raw) return raw } catch (e) {}
     return 'staff'
@@ -79,6 +81,33 @@ export default function IntervalConstruction({ pressedNotes }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qualities, answerMode])
 
+  // The note being built — starts at the root's own staff position every
+  // time a new prompt appears (or the root changes).
+  const rootStep = current ? diatonicStep(current.root.letter, ROOT_OCTAVE) : diatonicStep('C', ROOT_OCTAVE)
+  const [step, setStep] = useState(rootStep)
+  const [accidental, setAccidental] = useState('')
+  useEffect(() => { setStep(rootStep); setAccidental('') }, [current]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const { letter, octave } = stepToLetterOctave(step)
+  const guessVexKey = vexKeyFor(letter, accidental, octave)
+  const guessMidi = spellingMidi(letter, accidental, octave)
+
+  const moveUp = () => setStep((s) => Math.min(rootStep + STEP_RANGE, s + 1))
+  const moveDown = () => setStep((s) => Math.max(rootStep - STEP_RANGE, s - 1))
+
+  // Sort by actual pitch (midi), not the vexKey string — string order
+  // doesn't reliably match pitch order (e.g. "c/4" sorts before "cb/4"
+  // alphabetically despite Cb4 sounding a semitone *below* C4).
+  const staffNotes = current
+    ? [{
+        keys: [
+          { vexKey: current.root.vexKey, midi: current.root.midi },
+          { vexKey: guessVexKey, midi: guessMidi }
+        ].sort((a, b) => a.midi - b.midi).map((n) => n.vexKey),
+        duration: 'w'
+      }]
+    : []
+
   // Keyboard-mode answering: a newly-pressed key counts as the answer, same
   // pattern Note Identification already uses for its own keyboard input.
   const prevPressedRef = useRef(new Set())
@@ -91,18 +120,6 @@ export default function IntervalConstruction({ pressedNotes }) {
     prevPressedRef.current = currSet
     if (added.length > 0 && current && !lastResult) submitAnswer(added[0])
   }, [pressedNotes, current, lastResult, submitAnswer, answerMode])
-
-  // Click candidates: every valid staff spelling within an octave either
-  // side of the root — wide enough to cover every interval up to an
-  // octave without offering the whole keyboard's worth of positions.
-  const candidates = useMemo(() => {
-    if (!current) return []
-    return buildSpellingPool({ lowMidi: current.root.midi - 13, highMidi: current.root.midi + 13, spellings: ALL_SPELLINGS })
-  }, [current])
-
-  const placedNotes = lastResult && current
-    ? [{ vexKey: current.target.vexKey, state: lastResult.correct ? 'correct' : 'wrong' }]
-    : []
 
   return (
     <div>
@@ -130,29 +147,37 @@ export default function IntervalConstruction({ pressedNotes }) {
       <div className="identify-card">
         {current ? (
           <>
-            <div style={{ textAlign: 'center', fontSize: 40, fontWeight: 900, color: 'var(--accent)', marginBottom: 12 }}>{current.root.name} — {current.name}</div>
+            <div className="identify-staff-wrap" style={{ justifyContent: staffSettings.align === 'left' ? 'flex-start' : staffSettings.align === 'right' ? 'flex-end' : 'center' }}>
+              <div style={{ width: staffSettings.width * staffSettings.scale }}>
+                <Staff clef="treble" notes={staffNotes} minHeight={160} scale={staffSettings.scale} />
+              </div>
+            </div>
+            <div style={{ textAlign: 'center', fontSize: 32, fontWeight: 900, color: 'var(--accent)', margin: '8px 0 16px' }}>{current.root.name} — {current.name}</div>
+
             {answerMode === 'staff' ? (
-              <div className="identify-staff-wrap" style={{ justifyContent: staffSettings.align === 'left' ? 'flex-start' : staffSettings.align === 'right' ? 'flex-end' : 'center' }}>
-                <div style={{ width: staffSettings.width * staffSettings.scale }}>
-                  <ClickableStaff
-                    clef="treble"
-                    givenNotes={[current.root.vexKey]}
-                    candidates={candidates}
-                    placedNotes={placedNotes}
-                    onSelect={submitAnswer}
-                    disabled={!current || !!lastResult}
-                    minHeight={160}
-                    scale={staffSettings.scale}
-                  />
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 12 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <button className="play-cat-btn" onClick={moveUp} disabled={!!lastResult} title="Move up a step">▲</button>
+                  <button className="play-cat-btn" onClick={moveDown} disabled={!!lastResult} title="Move down a step">▼</button>
                 </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <button className={`play-cat-btn ${accidental === 'b' ? 'active' : ''}`} onClick={() => setAccidental('b')} disabled={!!lastResult}>♭</button>
+                    <button className={`play-cat-btn ${accidental === '' ? 'active' : ''}`} onClick={() => setAccidental('')} disabled={!!lastResult}>♮</button>
+                    <button className={`play-cat-btn ${accidental === '#' ? 'active' : ''}`} onClick={() => setAccidental('#')} disabled={!!lastResult}>♯</button>
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{accidental === 'b' ? 'Flat' : accidental === '#' ? 'Sharp' : 'None'}</div>
+                </div>
+                <button className="primary-btn" onClick={() => submitAnswer(guessVexKey)} disabled={!!lastResult}>Submit Answer</button>
               </div>
             ) : (
-              <div className="muted" style={{ textAlign: 'center', padding: '1rem' }}>
+              <div className="muted" style={{ textAlign: 'center', padding: '0.5rem' }}>
                 {lastResult ? (lastResult.correct ? 'Correct!' : 'Not quite —') : `Play ${current.name} above ${current.root.name} on the keyboard`}
               </div>
             )}
+
             {lastResult && !lastResult.correct && (
-              <div style={{ textAlign: 'center', marginTop: 8, fontSize: 13, color: 'var(--muted)' }}>{current.name} above {current.root.name} is {current.target.name} — shown above</div>
+              <div style={{ textAlign: 'center', marginTop: 8, fontSize: 13, color: 'var(--muted)' }}>{current.name} above {current.root.name} is {current.target.name}</div>
             )}
           </>
         ) : (
