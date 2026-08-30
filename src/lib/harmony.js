@@ -261,6 +261,21 @@ export function generateProgression(keyRoot, opts = {}) {
   return bars
 }
 
+// Assigns each chord in a bar a real note value (in beats, 4/4) instead of
+// splitting the bar evenly N ways — a bar can hold at most 3 chords (the
+// previous target, plus up to a ii and a V), and evenly dividing 4 beats by
+// 3 isn't a quarter/half/whole note at all. A single chord fills the bar
+// (whole note); two share it evenly (half + half); three give the first
+// chord — normally the one already sustaining from the previous bar — a
+// half note, and the two chords passing quickly through afterward a
+// quarter note each (half + quarter + quarter = 4 beats).
+export function beatsForBar(n) {
+  if (n <= 1) return [4]
+  if (n === 2) return [2, 2]
+  if (n === 3) return [2, 1, 1]
+  return new Array(n).fill(4 / n) // shouldn't happen in practice — even fallback
+}
+
 // A simple close-position voicing for a chord, stacked upward from the root
 // and anchored near middle C (60) — same "walk up, then shift whole octaves
 // to fit range/anchor" approach buildScaleSequence uses for scale runs.

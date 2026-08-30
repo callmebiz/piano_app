@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   getDiatonicChords, getSecondaryDominants, voiceChordNearMiddleC, ROOTS,
   getModalInterchangeChords, getTwoFiveChords, getSpecialTwoFives,
-  tritoneSub, getDiminishedApproachChords, getVAlternatives, generateProgression
+  tritoneSub, getDiminishedApproachChords, getVAlternatives, generateProgression, beatsForBar
 } from '../../lib/harmony'
 import { chordFormulas, formatMatch, intervalName, recognize } from '../../lib/chords'
 import { playChord } from '../../audio/engine'
@@ -147,28 +147,31 @@ export default function KeyCenter({ pressedNotes, setKeyboardTargetPCs = () => {
   const playProgression = () => {
     if (!progression || progression.length === 0) return
     stopProgressionPlayback()
-    // Each bar is one measure of fixed length, split evenly across however
-    // many chords sit inside it — not a flat per-chord duration. A bar with
-    // just the target chord (e.g. the final tonic) gets the whole measure;
-    // a bar with an approach chord (ii, V/x, °7) sharing it with the target
-    // it resolves to — the case that reads like a "pickup" leading into the
-    // target — divides that same measure between them, so the approach
-    // chord passes by quickly and the target still lands on the downbeat.
-    const barMs = 1600
+    // Each bar is one 4/4 measure. Chords inside it get real note values
+    // (via beatsForBar — quarter/half/whole, never an arbitrary N-way split)
+    // rather than a flat per-chord duration: a bar with just the target gets
+    // a whole note, while a bar holding the previous chord plus the approach
+    // chord(s) leading into the next target splits into a half note for the
+    // held chord and quarter notes for the (shorter, passing-through)
+    // approach chords.
+    const quarterMs = 400 // one beat — a whole note (single chord filling a bar) is 4x this
     const sustainRatio = 0.85 // leave a small gap before the next attack
     setIsPlayingProgression(true)
     let elapsed = 0
     progression.forEach((bar, bi) => {
-      const slotMs = barMs / bar.length
+      const beats = beatsForBar(bar.length)
+      let barElapsed = 0
       bar.forEach((c, ci) => {
+        const durMs = beats[ci] * quarterMs
         const id = setTimeout(() => {
           setActiveChip({ root: c.root, type: c.type, label: c.label })
           setPlayingPos({ bi, ci })
-          playChord(voiceChordNearMiddleC(c.root, c.type), slotMs * sustainRatio)
-        }, elapsed + ci * slotMs)
+          playChord(voiceChordNearMiddleC(c.root, c.type), durMs * sustainRatio)
+        }, elapsed + barElapsed)
         playbackTimersRef.current.push(id)
+        barElapsed += durMs
       })
-      elapsed += barMs
+      elapsed += 4 * quarterMs // always a full measure, regardless of how it's subdivided
     })
     const endId = setTimeout(() => { setIsPlayingProgression(false); setActiveChip(null); setPlayingPos(null) }, elapsed)
     playbackTimersRef.current.push(endId)
