@@ -191,7 +191,7 @@ export default function Settings({ open = false, onClose = () => {}, app = '', s
 
           <div style={{gridColumn:'1 / -1', fontSize:12, opacity:0.7}}>Sampled Steinway grand piano. Samples load the first time you play a note and are cached in the browser afterward, so it works offline from then on.</div>
 
-          {app === 'identify' && (
+          {(app === 'identify' || app === 'construct') && (
             <>
               <div style={{gridColumn:'1 / -1', marginTop:10, paddingTop:10, borderTop:'1px solid rgba(255,255,255,0.06)', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
                 <div style={{fontWeight:700, color:'var(--accent)'}}>Staff</div>
