@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { getAudioParams, setAudioParams, AUDIO_DEFAULTS } from '../audio/engine'
 import { getStaffSettings, setStaffSettings, STAFF_DEFAULTS } from '../lib/staffSettings'
-import { getProgressionSettings, setProgressionSettings, PROGRESSION_DEFAULTS } from '../lib/progressionSettings'
 
 export default function Settings({ open = false, onClose = () => {}, app = '', shrinkOn = false }) {
   const DEFAULT_WHITE = 40
@@ -41,10 +40,6 @@ export default function Settings({ open = false, onClose = () => {}, app = '', s
   const [staff, setStaff] = useState(() => getStaffSettings())
   const updateStaff = (partial) => setStaff(setStaffSettings(partial))
   const resetStaff = () => setStaff(setStaffSettings(STAFF_DEFAULTS))
-
-  const [progression, setProgression] = useState(() => getProgressionSettings())
-  const updateProgression = (partial) => setProgression(setProgressionSettings(partial))
-  const resetProgression = () => setProgression(setProgressionSettings(PROGRESSION_DEFAULTS))
 
   useEffect(() => {
     // apply initial values to CSS variables on mount
@@ -231,21 +226,6 @@ export default function Settings({ open = false, onClose = () => {}, app = '', s
                     {a}
                   </button>
                 ))}
-              </div>
-            </>
-          )}
-
-          {app === 'keycenter' && (
-            <>
-              <div style={{gridColumn:'1 / -1', marginTop:10, paddingTop:10, borderTop:'1px solid rgba(255,255,255,0.06)', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                <div style={{fontWeight:700, color:'var(--accent)'}}>Example Progression</div>
-                <button onClick={resetProgression} title="Reset progression playback to defaults" style={{padding:'6px 10px',borderRadius:6,border:'1px solid rgba(255,255,255,0.06)',background:'transparent',color:'var(--muted)'}}>Reset</button>
-              </div>
-
-              <div style={{fontWeight:600}}>Playback strength</div>
-              <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                <input type="range" min={10} max={100} value={Math.round(progression.velocity * 100)} onChange={e => updateProgression({ velocity: Number(e.target.value) / 100 })} style={{flex:1, minWidth:0}} />
-                <div style={{width:40,textAlign:'right',fontSize:12}}>{Math.round(progression.velocity * 100)}%</div>
               </div>
             </>
           )}

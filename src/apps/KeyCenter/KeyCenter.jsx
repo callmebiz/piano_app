@@ -6,7 +6,13 @@ import {
 } from '../../lib/harmony'
 import { chordFormulas, formatMatch, intervalName, recognize } from '../../lib/chords'
 import { playChord } from '../../audio/engine'
-import { useProgressionSettings } from '../../lib/progressionSettings'
+
+// Struck softer than the 0.85 used for single-chip preview clicks, so a
+// full progression doesn't hammer every chord at near-max force. Master
+// Volume (Settings) already governs overall loudness for every sound
+// source in the app — this is just the fixed per-note velocity, not a
+// second volume control.
+const PROGRESSION_VELOCITY = 0.6
 
 // Module-scope so it keeps a stable component identity across KeyCenter's
 // frequent re-renders (this component re-renders on every pressed-note
@@ -35,8 +41,6 @@ function ChordChip({ active, small, onClick, sub, label, displayName }) {
 }
 
 export default function KeyCenter({ pressedNotes, setKeyboardTargetPCs = () => {} }) {
-  const progressionSettings = useProgressionSettings()
-
   const loadRoot = () => {
     try { const raw = localStorage.getItem('keycenter:root'); if (raw != null) return Number(raw) } catch (e) {}
     return 0
@@ -169,7 +173,7 @@ export default function KeyCenter({ pressedNotes, setKeyboardTargetPCs = () => {
         const id = setTimeout(() => {
           setActiveChip({ root: c.root, type: c.type, label: c.label })
           setPlayingPos({ bi, ci })
-          playChord(voiceChordNearMiddleC(c.root, c.type), durMs * sustainRatio, progressionSettings.velocity)
+          playChord(voiceChordNearMiddleC(c.root, c.type), durMs * sustainRatio, PROGRESSION_VELOCITY)
         }, elapsed + barElapsed)
         playbackTimersRef.current.push(id)
         barElapsed += durMs
