@@ -116,7 +116,63 @@ function migrateLegacyIfNeeded(store) {
   return store
 }
 
+// One-time backfill of the fact table from existing lifetime buckets, so
+// Explore (and any other crossTab query) has real data immediately instead
+// of staying empty until the next few attempts happen to get recorded
+// through recordFact. Only multi-dimension LEAF buckets qualify — a bucket
+// with an array `parent` of 2+ entries (e.g. Play The Chord's
+// "chord:min7@2", parent ["type:min7","root:2"]) — since those are the
+// only existing buckets that actually carry more than one dimension's
+// worth of information.
+//
+// A leaf's aggregate (attempts/correct/totalTimeMs) can't tell us the
+// individual timing of each past attempt, so this synthesizes `attempts`
+// separate fact rows for it — `correct` of them marked correct (evenly
+// splitting the aggregate totalTimeMs across just those, matching how
+// only correct attempts carry timing in the first place) and the rest
+// marked incorrect — so crossTab summing them back up reproduces the
+// exact same attempts/correct/totalTimeMs the existing lifetime bucket
+// already shows, not an approximation.
+function backfillFactsIfNeeded(store) {
+  if (store.factsBackfilledV1) return store
+  try {
+    for (const [exercise, buckets] of Object.entries(store.lifetime || {})) {
+      const leaves = Object.entries(buckets).filter(([, b]) => Array.isArray(b.parent) && b.parent.length >= 2 && b.attempts > 0)
+      if (leaves.length === 0) continue
+      store.facts[exercise] = store.facts[exercise] || []
+      for (const [key, b] of leaves) {
+        const fields = {}
+        for (const parentKey of b.parent) {
+          const i = parentKey.indexOf(':')
+          if (i === -1) continue
+          const fieldKey = parentKey.slice(0, i)
+          const value = parentKey.slice(i + 1)
+          const parentBucket = buckets[parentKey]
+          fields[fieldKey] = { value, label: (parentBucket && parentBucket.label) || value, dimension: (parentBucket && parentBucket.dimension) || fieldKey }
+        }
+        if (Object.keys(fields).length < 2) continue
+        const perCorrectMs = b.correct > 0 ? b.totalTimeMs / b.correct : null
+        for (let i = 0; i < b.attempts; i++) {
+          const correct = i < b.correct
+          store.facts[exercise].push({
+            id: `backfill-${key}-${i}`,
+            ts: Date.now(),
+            correct,
+            timeMs: correct ? perCorrectMs : null,
+            promptKey: key,
+            promptLabel: b.label || key,
+            fields
+          })
+        }
+      }
+    }
+  } catch (e) {}
+  store.factsBackfilledV1 = true
+  return store
+}
+
 let store = migrateLegacyIfNeeded(loadStore())
+store = backfillFactsIfNeeded(store)
 saveStore(store)
 
 function pruneEvents(list) {
