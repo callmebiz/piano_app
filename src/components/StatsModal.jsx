@@ -42,6 +42,47 @@ const speedColor = (ms, minMs, maxMs) => {
   return t <= 0.4 ? 'var(--accent)' : t <= 0.7 ? '#ffd24a' : '#ff8a80'
 }
 
+// Multi-select Accuracy/Speed toggle — both can be active at once, but at
+// least one always stays on (nothing to show otherwise). Shared by the
+// trend chart and Explore's heatmap so both charts filter the same way.
+function MetricToggle({ metrics, onChange }) {
+  const toggle = (m) => onChange(metrics.includes(m) ? (metrics.length > 1 ? metrics.filter((x) => x !== m) : metrics) : [...metrics, m])
+  return (
+    <div style={{ display: 'flex', gap: 4 }}>
+      <button className={`play-cat-btn ${metrics.includes('accuracy') ? 'active' : ''}`} style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => toggle('accuracy')}>Accuracy</button>
+      <button className={`play-cat-btn ${metrics.includes('speed') ? 'active' : ''}`} style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => toggle('speed')}>Speed</button>
+    </div>
+  )
+}
+
+// One tick's worth of bars for whichever metrics are active — a single
+// full-width bar when only one metric is selected (unchanged from before),
+// or two thinner bars side by side when both are, so a tick with both
+// active reads as a small grouped/clustered bar chart instead of picking
+// one metric to show. Speed's bar height also means "better" the taller it
+// is (fastest = tallest), matching accuracy's convention, even though its
+// color comes from a separate relative fast/slow scale.
+function MetricBars({ metrics, accuracy, avgTimeMs, minMs, maxMs }) {
+  const showAcc = metrics.includes('accuracy')
+  const showSpeed = metrics.includes('speed')
+  const speedPct = avgTimeMs == null || maxMs === minMs ? 50 : 100 - ((avgTimeMs - minMs) / (maxMs - minMs)) * 100
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: '100%', width: '100%' }}>
+      {showAcc && (
+        <div style={{ flex: 1, height: `${Math.max(4, accuracy)}%`, background: accuracyColor(accuracy), borderRadius: '2px 2px 0 0' }} />
+      )}
+      {showSpeed && (
+        <div style={{
+          flex: 1,
+          height: avgTimeMs == null ? '4%' : `${Math.max(4, speedPct)}%`,
+          background: avgTimeMs == null ? 'rgba(255,255,255,0.12)' : speedColor(avgTimeMs, minMs, maxMs),
+          borderRadius: '2px 2px 0 0'
+        }} />
+      )}
+    </div>
+  )
+}
+
 function Kpi({ label, value, sub }) {
   return (
     <div style={{ minWidth: 100 }}>
@@ -116,13 +157,19 @@ const selectStyle = {
 }
 
 // Cross any two tracked dimensions as a color-coded matrix — rows = one
-// field's values, columns = the other's. `metric` picks what each cell
-// shows and is colored by: 'accuracy' (colored absolutely — 85%+ is always
-// good) or 'speed' (colored relative to the fastest/slowest observed in
-// THIS slice, since there's no universal "good" response time). Attempts
-// still drive opacity either way, so thin-sample cells read as less
-// certain. `combos` is a crossTab() result for exactly [fieldA, fieldB].
-function Heatmap({ combos, fieldA, fieldB, labelA, labelB, metric, selectedKey, onSelect }) {
+// field's values, columns = the other's. `metrics` (from the shared
+// MetricToggle) picks what each cell shows: a single colored square with
+// its number when only one of Accuracy/Speed is on (accuracy colored
+// absolutely — 85%+ is always good; speed colored relative to the
+// fastest/slowest observed in THIS slice, no universal "good" response
+// time), or a small grouped pair of mini bars (via MetricBars, same as the
+// trend chart) when both are on — a cell that size can't fit two printed
+// numbers legibly, so the full detail lives in the tooltip instead.
+// Attempts drive opacity either way, so thin-sample cells read as less
+// certain. `combos` is a crossTab() result including at least [fieldA,
+// fieldB] (it may carry more dims too, when a 3rd slice field is active —
+// only fieldA/fieldB are used for the axes here).
+function Heatmap({ combos, fieldA, fieldB, labelA, labelB, metrics, selectedKey, onSelect }) {
   const aMap = new Map()
   const bMap = new Map()
   for (const c of combos) {
@@ -137,6 +184,8 @@ function Heatmap({ combos, fieldA, fieldB, labelA, labelB, metric, selectedKey, 
   const timedMs = combos.map((c) => c.avgTimeMs).filter((ms) => ms != null)
   const minMs = timedMs.length > 0 ? Math.min(...timedMs) : 0
   const maxMs = timedMs.length > 0 ? Math.max(...timedMs) : 0
+  const dual = metrics.length > 1
+  const singleMetric = metrics[0]
 
   return (
     <div style={{ overflowX: 'auto' }}>
@@ -155,25 +204,37 @@ function Heatmap({ combos, fieldA, fieldB, labelA, labelB, metric, selectedKey, 
               <td style={{ padding: '4px 8px', color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>{a.label}</td>
               {bVals.map((b) => {
                 const c = cellFor(a.value, b.value)
-                const display = c ? (metric === 'speed' ? (c.avgTimeMs == null ? '—' : fmtMs(c.avgTimeMs)) : Math.round(c.accuracy)) : null
-                const color = c ? (metric === 'speed' ? speedColor(c.avgTimeMs, minMs, maxMs) : accuracyColor(c.accuracy)) : null
+                const tooltip = c ? `${a.label} · ${b.label}: ${Math.round(c.accuracy)}% (${c.correct}/${c.attempts}), ${fmtMs(c.avgTimeMs)} avg` : null
                 return (
                   <td key={b.value} style={{ padding: 2 }}>
-                    {c ? (
+                    {!c ? (
+                      <div style={{ width: 44, height: 28, borderRadius: 4, background: 'rgba(255,255,255,0.02)' }} />
+                    ) : dual ? (
                       <div
                         onClick={() => onSelect(c.key)}
-                        title={`${a.label} · ${b.label}: ${Math.round(c.accuracy)}% (${c.correct}/${c.attempts}), ${fmtMs(c.avgTimeMs)} avg`}
+                        title={tooltip}
                         style={{
-                          width: 44, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          background: color, opacity: Math.max(0.35, c.attempts / maxAttempts),
-                          color: '#071025', fontWeight: 700, fontSize: metric === 'speed' ? 10 : 11, borderRadius: 4, cursor: 'pointer',
+                          width: 44, height: 28, padding: 2, borderRadius: 4, cursor: 'pointer',
+                          background: 'rgba(255,255,255,0.03)', opacity: Math.max(0.35, c.attempts / maxAttempts),
                           outline: selectedKey === c.key ? '2px solid var(--accent)' : 'none', outlineOffset: 1
                         }}
                       >
-                        {display}
+                        <MetricBars metrics={metrics} accuracy={c.accuracy} avgTimeMs={c.avgTimeMs} minMs={minMs} maxMs={maxMs} />
                       </div>
                     ) : (
-                      <div style={{ width: 44, height: 28, borderRadius: 4, background: 'rgba(255,255,255,0.02)' }} />
+                      <div
+                        onClick={() => onSelect(c.key)}
+                        title={tooltip}
+                        style={{
+                          width: 44, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          background: singleMetric === 'speed' ? speedColor(c.avgTimeMs, minMs, maxMs) : accuracyColor(c.accuracy),
+                          opacity: Math.max(0.35, c.attempts / maxAttempts),
+                          color: '#071025', fontWeight: 700, fontSize: singleMetric === 'speed' ? 10 : 11, borderRadius: 4, cursor: 'pointer',
+                          outline: selectedKey === c.key ? '2px solid var(--accent)' : 'none', outlineOffset: 1
+                        }}
+                      >
+                        {singleMetric === 'speed' ? (c.avgTimeMs == null ? '—' : fmtMs(c.avgTimeMs)) : Math.round(c.accuracy)}
+                      </div>
                     )}
                   </td>
                 )
@@ -197,36 +258,77 @@ function Explore({ exercise }) {
   const fieldKeys = Object.keys(fields)
   const [fieldA, setFieldA] = useState(fieldKeys[0] || '')
   const [fieldB, setFieldB] = useState(fieldKeys[1] || fieldKeys[0] || '')
-  const [metric, setMetric] = useState('accuracy')
+  // Optional 3rd dimension to slice through — the heatmap always shows
+  // fieldA × fieldB, but when a slice field is picked it's pinned to one
+  // value at a time (stepped via the slider), like pulling one layer out
+  // of a 3D cube instead of only ever seeing it collapsed onto 2 axes.
+  const [fieldC, setFieldC] = useState('')
+  const [sliceIndex, setSliceIndex] = useState(0)
+  const [metrics, setMetrics] = useState(['accuracy'])
   const [selectedKey, setSelectedKey] = useState(null)
 
   if (fieldKeys.length < 2) return null // nothing to cross yet
 
-  const combos = crossTab(exercise, [fieldA, fieldB])
+  const sliceOptions = fieldKeys.filter((k) => k !== fieldA && k !== fieldB)
+  const activeFieldC = fieldC && sliceOptions.includes(fieldC) ? fieldC : ''
+
+  const crossFields = activeFieldC ? [fieldA, fieldB, activeFieldC] : [fieldA, fieldB]
+  const allCombos = crossTab(exercise, crossFields)
+
+  const sliceValues = activeFieldC
+    ? Array.from(new Map(allCombos.map((c) => [c.dims[activeFieldC], c.fieldLabels[activeFieldC]])), ([value, label]) => ({ value, label }))
+      .sort((x, y) => String(x.label).localeCompare(String(y.label)))
+    : []
+  const clampedIndex = Math.min(sliceIndex, Math.max(0, sliceValues.length - 1))
+  const activeSlice = sliceValues[clampedIndex] || null
+
+  const combos = activeFieldC && activeSlice ? allCombos.filter((c) => c.dims[activeFieldC] === activeSlice.value) : allCombos
   const selected = combos.find((c) => c.key === selectedKey) || null
+
+  const changeField = (setter) => (e) => { setter(e.target.value); setSelectedKey(null) }
 
   return (
     <div style={{ marginBottom: 24 }}>
       <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Explore</div>
       <div style={{ fontSize: 11, color: 'var(--muted)', opacity: 0.8, marginBottom: 10 }}>Cross any two tracked dimensions — not just the breakdowns below.</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-        <select value={fieldA} onChange={(e) => { setFieldA(e.target.value); setSelectedKey(null) }} style={selectStyle}>
+        <select value={fieldA} onChange={changeField(setFieldA)} style={selectStyle}>
           {fieldKeys.map((k) => <option key={k} value={k}>{fields[k]}</option>)}
         </select>
         <span style={{ color: 'var(--muted)', fontSize: 12 }}>×</span>
-        <select value={fieldB} onChange={(e) => { setFieldB(e.target.value); setSelectedKey(null) }} style={selectStyle}>
+        <select value={fieldB} onChange={changeField(setFieldB)} style={selectStyle}>
           {fieldKeys.map((k) => <option key={k} value={k}>{fields[k]}</option>)}
         </select>
-        <div style={{ display: 'flex', gap: 4, marginLeft: 8 }}>
-          <button className={`play-cat-btn ${metric === 'accuracy' ? 'active' : ''}`} style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => setMetric('accuracy')}>Accuracy</button>
-          <button className={`play-cat-btn ${metric === 'speed' ? 'active' : ''}`} style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => setMetric('speed')}>Speed</button>
-        </div>
+        <MetricToggle metrics={metrics} onChange={setMetrics} />
       </div>
+
+      {sliceOptions.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, color: 'var(--muted)' }}>Slice by:</span>
+          <select value={activeFieldC} onChange={(e) => { setFieldC(e.target.value); setSliceIndex(0); setSelectedKey(null) }} style={selectStyle}>
+            <option value="">None</option>
+            {sliceOptions.map((k) => <option key={k} value={k}>{fields[k]}</option>)}
+          </select>
+          {activeFieldC && sliceValues.length > 0 && (
+            <>
+              <button className="play-cat-btn" style={{ padding: '2px 8px', fontSize: 12 }} disabled={clampedIndex === 0} onClick={() => setSliceIndex((i) => Math.max(0, i - 1))}>‹</button>
+              <input
+                type="range" min={0} max={Math.max(0, sliceValues.length - 1)} value={clampedIndex}
+                onChange={(e) => { setSliceIndex(Number(e.target.value)); setSelectedKey(null) }}
+                style={{ width: 100, accentColor: 'var(--accent)' }}
+              />
+              <button className="play-cat-btn" style={{ padding: '2px 8px', fontSize: 12 }} disabled={clampedIndex === sliceValues.length - 1} onClick={() => setSliceIndex((i) => Math.min(sliceValues.length - 1, i + 1))}>›</button>
+              <strong style={{ fontSize: 12, minWidth: 90 }}>{activeSlice ? activeSlice.label : '—'}</strong>
+            </>
+          )}
+        </div>
+      )}
+
       {fieldA === fieldB ? (
         <div className="muted" style={{ padding: 8 }}>Pick two different dimensions to cross.</div>
       ) : (
         <>
-          <Heatmap combos={combos} fieldA={fieldA} fieldB={fieldB} labelA={fields[fieldA]} labelB={fields[fieldB]} metric={metric} selectedKey={selectedKey} onSelect={(k) => setSelectedKey((s) => (s === k ? null : k))} />
+          <Heatmap combos={combos} fieldA={fieldA} fieldB={fieldB} labelA={fields[fieldA]} labelB={fields[fieldB]} metrics={metrics} selectedKey={selectedKey} onSelect={(k) => setSelectedKey((s) => (s === k ? null : k))} />
           {selected && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 10, fontSize: 12, color: 'var(--muted)' }}>
               <strong style={{ color: 'inherit', fontWeight: 700 }}>{selected.label}</strong>
@@ -275,6 +377,9 @@ export default function StatsModal({ exercise, title, open, onClose = () => {} }
   const [expandedSections, setExpandedSections] = useState({})
   // Bumped on Reset so the memoized reads below re-run against the cleared store.
   const [refreshSeq, setRefreshSeq] = useState(0)
+  // Trend chart's own Accuracy/Speed selection — separate from Explore's,
+  // since they're different charts a viewer may want set differently.
+  const [trendMetrics, setTrendMetrics] = useState(['accuracy'])
 
   const allRows = useMemo(() => {
     if (!open) return []
@@ -346,6 +451,27 @@ export default function StatsModal({ exercise, title, open, onClose = () => {} }
   const sortIndicator = (key) => (sortKey === key ? <span className="sort-indicator">{sortDir === 'asc' ? '▲' : '▼'}</span> : null)
 
   const maxAttemptsInTrend = Math.max(1, ...trend.map((t) => t.attempts))
+  // Speed's relative fast/slow scale for the trend window — only days with
+  // any timed (correct) attempts count toward it.
+  const trendTimedMs = trend.map((t) => t.avgTimeMs).filter((ms) => ms != null)
+  const trendMinMs = trendTimedMs.length > 0 ? Math.min(...trendTimedMs) : 0
+  const trendMaxMs = trendTimedMs.length > 0 ? Math.max(...trendTimedMs) : 0
+  // One value-label line per day, precomputed so the JSX below doesn't
+  // have to inline a metric-dependent formula — only shown when exactly
+  // one metric is active (with both, the bars themselves carry the detail
+  // and a per-day label for each would be too cramped to read).
+  const trendLabel = (t) => {
+    if (trendMetrics.length !== 1 || t.attempts === 0) return null
+    if (trendMetrics[0] === 'speed') return t.avgTimeMs == null ? null : fmtMs(t.avgTimeMs)
+    return `${Math.round(t.accuracy)}%`
+  }
+  const trendLabelPct = (t) => {
+    if (trendMetrics[0] === 'speed') {
+      if (t.avgTimeMs == null) return 0
+      return trendMaxMs === trendMinMs ? 50 : 100 - ((t.avgTimeMs - trendMinMs) / (trendMaxMs - trendMinMs)) * 100
+    }
+    return t.accuracy || 0
+  }
 
   // KPI cards reflect the current selection, if any — a live dashboard
   // rather than one fixed set of exercise-wide numbers.
@@ -447,14 +573,31 @@ export default function StatsModal({ exercise, title, open, onClose = () => {} }
       </div>
 
       <div style={{ marginBottom: 22 }}>
-        <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Accuracy — last {TREND_DAYS} days</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 6 }}>
+          <div style={{ fontSize: 12, color: 'var(--muted)' }}>{trendMetrics.includes('accuracy') && trendMetrics.includes('speed') ? 'Accuracy & Speed' : trendMetrics.includes('speed') ? 'Speed' : 'Accuracy'} — last {TREND_DAYS} days</div>
+          <MetricToggle metrics={trendMetrics} onChange={setTrendMetrics} />
+        </div>
         <div style={{ display: 'flex', gap: 8 }}>
           {/* Y-axis — without it, a chart of mostly-empty days (no attempts
-              that day) reads as ambiguous: is a tall bar 100% or just "some"? */}
+              that day) reads as ambiguous: is a tall bar 100% or just "some"?
+              Reads "taller = better" for both metrics when both are shown —
+              speed's own scale is relative to the fastest/slowest day in
+              this window, not an absolute time, so a shared 0–100% axis
+              still applies to both. */}
           <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', width: 28, height: TREND_HEIGHT, paddingTop: TREND_LABEL_SPACE, flexShrink: 0, fontSize: 9, color: 'var(--muted)', opacity: 0.6, textAlign: 'right' }}>
-            <span>100%</span>
-            <span>50%</span>
-            <span>0%</span>
+            {trendMetrics.length === 1 && trendMetrics[0] === 'speed' ? (
+              <>
+                <span>Fastest</span>
+                <span />
+                <span>Slowest</span>
+              </>
+            ) : (
+              <>
+                <span>100%</span>
+                <span>50%</span>
+                <span>0%</span>
+              </>
+            )}
           </div>
           <div style={{ flex: 1, position: 'relative', height: TREND_HEIGHT }}>
             <div style={{ position: 'absolute', top: TREND_LABEL_SPACE, left: 0, right: 0, bottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', pointerEvents: 'none' }}>
@@ -464,19 +607,23 @@ export default function StatsModal({ exercise, title, open, onClose = () => {} }
             </div>
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: '100%', position: 'relative' }}>
               {trend.map((t) => (
-                <div key={t.date} title={`${t.date}: ${t.attempts} attempt${t.attempts === 1 ? '' : 's'}${t.accuracy != null ? `, ${Math.round(t.accuracy)}%` : ''}`} style={{ flex: 1, height: `calc(100% - ${TREND_LABEL_SPACE}px)`, display: 'flex', alignItems: 'flex-end', position: 'relative' }}>
-                  {t.attempts > 0 && (
-                    <div style={{ position: 'absolute', bottom: `calc(${Math.max(6, t.accuracy)}% + 2px)`, left: '50%', transform: 'translateX(-50%)', fontSize: 8, color: 'var(--muted)', opacity: 0.8, whiteSpace: 'nowrap' }}>
-                      {Math.round(t.accuracy)}%
+                <div
+                  key={t.date}
+                  title={`${t.date}: ${t.attempts} attempt${t.attempts === 1 ? '' : 's'}${t.accuracy != null ? `, ${Math.round(t.accuracy)}%` : ''}${t.avgTimeMs != null ? `, ${fmtMs(t.avgTimeMs)} avg` : ''}`}
+                  style={{ flex: 1, height: `calc(100% - ${TREND_LABEL_SPACE}px)`, display: 'flex', alignItems: 'flex-end', position: 'relative' }}
+                >
+                  {trendLabel(t) != null && (
+                    <div style={{ position: 'absolute', bottom: `calc(${Math.max(6, trendLabelPct(t))}% + 2px)`, left: '50%', transform: 'translateX(-50%)', fontSize: 8, color: 'var(--muted)', opacity: 0.8, whiteSpace: 'nowrap' }}>
+                      {trendLabel(t)}
                     </div>
                   )}
-                  <div style={{
-                    width: '100%',
-                    height: t.attempts === 0 ? '2px' : `${Math.max(6, t.accuracy)}%`,
-                    background: t.attempts === 0 ? 'rgba(255,255,255,0.12)' : accuracyColor(t.accuracy),
-                    opacity: t.attempts === 0 ? 1 : Math.max(0.4, t.attempts / maxAttemptsInTrend),
-                    borderRadius: 2
-                  }} />
+                  {t.attempts === 0 ? (
+                    <div style={{ width: '100%', height: '2px', background: 'rgba(255,255,255,0.12)', borderRadius: 2 }} />
+                  ) : (
+                    <div style={{ width: '100%', height: '100%', opacity: Math.max(0.4, t.attempts / maxAttemptsInTrend) }}>
+                      <MetricBars metrics={trendMetrics} accuracy={t.accuracy || 0} avgTimeMs={t.avgTimeMs} minMs={trendMinMs} maxMs={trendMaxMs} />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

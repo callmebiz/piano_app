@@ -500,14 +500,16 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
     return arr.length > 0 ? Math.min(...arr) : null
   }
 
+  const inversionLabel = (inv) => (inv === 0 ? 'Root Position' : inv === 1 ? '1st Inversion' : inv === 2 ? '2nd Inversion' : `${inv}rd Inversion`)
+
   // Field keys ("type"/"root") match what this app has always used for its
   // bucket keys (`type:${t}`, `root:${r}`, `chord:${t}@${r}`) — recordFact
   // builds the exact same buckets from these, so existing lifetime totals
   // keep accumulating on the same keys instead of starting over under new
   // ones. recordFact also tracks the previous prompt itself now, so no
-  // more lastChordKeyRef here. `hand` is sparse — omitted entirely when
-  // there's no reading (e.g. nothing pressed at record time), rather than
-  // recorded as a guess.
+  // more lastChordKeyRef here. `hand`/`inversion` are sparse — omitted
+  // entirely when there's no reading (nothing pressed yet, or Allow
+  // Inversions is off), rather than recorded as a guess.
   const recordRound = (tmpl, correct, timeMs) => {
     if (!tmpl) return
     if (!trackStats) return
@@ -525,7 +527,8 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
       fields: {
         type: { value: t, label: fm.longName, dimension: 'Chord Type' },
         root: { value: r, label: ROOTS[r], dimension: 'Root' },
-        ...(hand ? { hand: { value: hand, label: hand === 'left' ? 'Left Hand' : 'Right Hand', dimension: 'Hand' } } : {})
+        ...(hand ? { hand: { value: hand, label: hand === 'left' ? 'Left Hand' : 'Right Hand', dimension: 'Hand' } } : {}),
+        ...(allowInversions && currentInversion != null ? { inversion: { value: currentInversion, label: inversionLabel(currentInversion), dimension: 'Inversion' } } : {})
       }
     })
   }
