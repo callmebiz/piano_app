@@ -42,16 +42,11 @@ function Kpi({ label, value, sub }) {
   )
 }
 
-const selectStyle = {
-  background: 'rgba(255,255,255,0.04)', color: 'inherit', border: '1px solid rgba(255,255,255,0.1)',
-  borderRadius: 6, padding: '5px 8px', fontSize: 12, fontFamily: 'inherit', cursor: 'pointer'
-}
-
 // A vertical bar chart (Y-axis + gridlines, one tick per bar, value label
-// printed above each bar) — same visual language as the trend chart below,
-// used for the dropdown-filtered Chord-Type/Root breakdowns so picking e.g.
-// one root shows its chord types as an actual chart instead of another
-// stack of horizontal progress-bar rows.
+// printed above each bar) — same visual language as the trend chart below.
+// Used inside an expanded row to show its children (e.g. one root's own
+// tracked chord types) as an actual chart instead of another stack of
+// nested horizontal-bar rows.
 function BarChart({ bars, selectedKey, onBarClick, height = 120 }) {
   if (bars.length === 0) return <div className="muted" style={{ padding: 8 }}>No data yet</div>
   return (
@@ -111,25 +106,32 @@ function BarChart({ bars, selectedKey, onBarClick, height = 120 }) {
 // Play The Chord's "Root" vs "Chord Type") render as their own section, all
 // shown at once — not one dimension at a time behind a tab, so e.g. a
 // chord's type and root breakdowns are both visible together without
-// clicking anything. Clicking any row selects it — the KPI cards above
-// switch to that item's own numbers, and the row expands into its children
-// (if it has any — a bucket can belong under more than one parent, so e.g.
-// a specific chord shows up as a child under both its Root's and its Chord
-// Type's section) or its incoming transition timing (if it's a true leaf —
-// "how fast/accurate is this right after X"). All driven by lib/practiceStats.js.
+// clicking anything. Clicking a row opens (or closes) it — a bucket can
+// belong under more than one parent, so e.g. a specific chord shows up as
+// a child under both its Root's and its Chord Type's section — and shows a
+// bar chart of its children right underneath (e.g. root B's own tracked
+// chord types), or its incoming transition timing directly if it's already
+// a true leaf ("how fast/accurate is this right after X"). Clicking a bar
+// within that chart doesn't close the row — it just becomes the new KPI
+// source, and shows its own transitions below the chart if it's a leaf
+// too. All driven by lib/practiceStats.js.
 export default function StatsModal({ exercise, title, open, onClose = () => {} }) {
   const [sortKey, setSortKey] = useState('accuracy')
   const [sortDir, setSortDir] = useState('asc') // weakest items first by default
+  // Which item's own numbers the KPI header reflects — set by clicking
+  // either a row or a bar within an expanded row's chart.
   const [selectedKey, setSelectedKey] = useState(null)
+  // Which single row is drilled open (showing its children's chart, or its
+  // own transitions panel) — kept separate from selectedKey so clicking a
+  // bar inside that chart to inspect it doesn't also collapse the row it
+  // lives in (they used to be the same piece of state, which meant
+  // drilling one level into a chord's actual transitions immediately
+  // closed the very section you'd just opened).
+  const [expandedKey, setExpandedKey] = useState(null)
   // Keyed by section id ('flat', or a dimension name like 'Chord Type') —
   // each breakdown expands independently since they're all shown at once
   // now, not one-at-a-time behind a tab.
   const [expandedSections, setExpandedSections] = useState({})
-  // Keyed by dimension name — 'ALL' (the default) or a specific top-level
-  // row's key from that dimension (e.g. 'root:2'). Drives the two-dimension
-  // dropdown+chart breakdown: picking a specific Root narrows the Chord
-  // Type chart down to just that root's chords, and vice versa.
-  const [filters, setFilters] = useState({})
   // Bumped on Reset so the memoized reads below re-run against the cleared store.
   const [refreshSeq, setRefreshSeq] = useState(0)
 
@@ -162,31 +164,9 @@ export default function StatsModal({ exercise, title, open, onClose = () => {} }
   // filtered to.
   const otherParentKeyOf = (leaf, excludeKey) => (Array.isArray(leaf.parent) ? leaf.parent.find((p) => p !== excludeKey) : null) || null
 
-  // Exactly two dimensions (Play The Chord's Chord Type/Root, Scales' Scale
-  // Type/Root) get the dropdown + bar-chart breakdown below; anything else
-  // (no dimension split at all — Identify, Ear Training) keeps the plain
-  // flat list.
-  const useChartBreakdown = dimensions.length === 2
-
-  const filterFor = (dim) => filters[dim] || 'ALL'
-  const setFilterFor = (dim, key) => { setFilters((f) => ({ ...f, [dim]: key })); setSelectedKey(null) }
-
-  // Bars for `dim`'s chart: the OTHER dimension's own top-level rows when
-  // `dim` is unfiltered ("ALL"), or — once a specific value of `dim` is
-  // picked — that value's real children, each relabeled with just its
-  // other-dimension identity so the chart doesn't repeat the filter in
-  // every tick.
-  const chartBarsFor = (dim, otherDim) => {
-    const f = filterFor(dim)
-    if (f === 'ALL') return topRows.filter((r) => r.dimension === otherDim)
-    return childrenOf(f).map((leaf) => {
-      const other = rowByKey(otherParentKeyOf(leaf, f))
-      return { ...leaf, label: other ? other.label : leaf.label }
-    })
-  }
-
   // One section per dimension (Chord Type, Root, …), shown together rather
-  // than behind a tab switcher — used only for the flat (no chart) case.
+  // than behind a tab switcher — or, when there's no dimension split at
+  // all (Identify, Ear Training), a single flat section.
   const sections = dimensions.length > 0
     ? dimensions.map((d) => ({ id: d, title: d, rows: topRows.filter((r) => r.dimension === d) }))
     : [{ id: 'flat', title: null, rows: topRows }]
@@ -204,7 +184,15 @@ export default function StatsModal({ exercise, title, open, onClose = () => {} }
     setRefreshSeq((n) => n + 1)
   }
 
-  const selectRow = (key) => setSelectedKey((k) => (k === key ? null : key))
+  // Clicking a top-level row opens (or closes) its own drill-down and
+  // makes it the KPI header's source. Clicking a bar inside that drill-down
+  // only changes the KPI source — it leaves expandedKey alone, so the
+  // chart you just opened stays open while you inspect one bar of it.
+  const toggleRow = (key) => {
+    setExpandedKey((k) => (k === key ? null : key))
+    setSelectedKey(key)
+  }
+  const selectBar = (key) => setSelectedKey((k) => (k === key ? null : key))
 
   const sortIndicator = (key) => (sortKey === key ? <span className="sort-indicator">{sortDir === 'asc' ? '▲' : '▼'}</span> : null)
 
@@ -238,22 +226,34 @@ export default function StatsModal({ exercise, title, open, onClose = () => {} }
   }
 
   // One compact row (label, inline accuracy bar, attempts, speed) plus,
-  // when it's the selected one, whatever nests below it — its children if
-  // it has any, else its transitions panel.
+  // when it's the expanded one, whatever nests below it — a bar chart of
+  // its children if it has any (e.g. root B's own tracked chord types),
+  // else its transitions panel directly (it's already a true leaf).
   const renderRow = (row, indent) => {
+    const isExpandedRow = expandedKey === row.key
     const isSelected = selectedKey === row.key
     const children = childrenOf(row.key)
+    // Children are labeled with the FULL combined name (e.g. "B Diminished
+    // 7th") since that's what makes sense as a row of their own elsewhere —
+    // but as chart ticks under a row already named "B", repeating "B" in
+    // every one is just noise, so relabel with only the other dimension's
+    // own name ("Diminished 7th").
+    const childBars = children.map((c) => {
+      const other = rowByKey(otherParentKeyOf(c, row.key))
+      return { ...c, label: other ? other.label : c.label }
+    })
+    const selectedChild = children.find((c) => c.key === selectedKey)
     return (
       <React.Fragment key={row.key}>
         <div
-          onClick={() => selectRow(row.key)}
+          onClick={() => toggleRow(row.key)}
           style={{
             display: 'flex', alignItems: 'center', gap: 10, padding: '7px 8px', paddingLeft: 8 + indent * 20,
             cursor: 'pointer', borderRadius: 6,
             background: isSelected ? 'rgba(110,231,183,0.10)' : 'transparent'
           }}
         >
-          <span style={{ display: 'inline-block', width: 12, opacity: 0.6, fontSize: 11 }}>{isSelected ? '▾' : '▸'}</span>
+          <span style={{ display: 'inline-block', width: 12, opacity: 0.6, fontSize: 11 }}>{isExpandedRow ? '▾' : '▸'}</span>
           <div style={{ width: indent === 0 ? 130 : 110, flexShrink: 0, fontSize: 13, fontWeight: isSelected ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.label}</div>
           <div style={{ flex: 1, height: 8, background: 'rgba(255,255,255,0.06)', borderRadius: 4, overflow: 'hidden', minWidth: 40 }}>
             <div style={{ width: `${Math.max(3, row.accuracy)}%`, height: '100%', background: accuracyColor(row.accuracy) }} />
@@ -261,8 +261,16 @@ export default function StatsModal({ exercise, title, open, onClose = () => {} }
           <div style={{ width: 82, fontSize: 12, color: 'var(--muted)', textAlign: 'right', flexShrink: 0 }}>{Math.round(row.accuracy)}% ({row.correct}/{row.attempts})</div>
           <div style={{ width: 60, fontSize: 12, color: 'var(--muted)', textAlign: 'right', flexShrink: 0 }}>{fmtMs(row.avgTimeMs)}</div>
         </div>
-        {isSelected && children.length > 0 && sortRows(children, 'accuracy', 'asc').map((c) => renderRow(c, indent + 1))}
-        {isSelected && children.length === 0 && transitionsPanel(row.key)}
+        {isExpandedRow && children.length > 0 && (
+          <div style={{ paddingLeft: 8 + (indent + 1) * 20, paddingRight: 8, paddingTop: 4, paddingBottom: 8 }}>
+            <BarChart bars={sortRows(childBars, sortKey, sortDir)} selectedKey={selectedKey} onBarClick={selectBar} height={100} />
+          </div>
+        )}
+        {isExpandedRow && children.length === 0 && transitionsPanel(row.key)}
+        {/* A clicked bar that's itself a true leaf (both dimensions now
+            pinned down) gets its own transitions panel right below the
+            chart it lives in. */}
+        {isExpandedRow && selectedChild && childrenOf(selectedChild.key).length === 0 && transitionsPanel(selectedChild.key)}
       </React.Fragment>
     )
   }
@@ -331,72 +339,40 @@ export default function StatsModal({ exercise, title, open, onClose = () => {} }
         </div>
       </div>
 
-      {/* Breakdown — for a two-dimension exercise (Play The Chord, Scales),
-          one dropdown + bar chart per dimension: pick a specific Root and
-          the Chord Type chart narrows to just that root's chords (relabeled
-          by type alone), and vice versa — instead of a tab, and instead of
-          drilling a row into another stack of horizontal bars. Anything
-          else (Identify, Ear Training — no dimension split) keeps the
-          plain flat list. */}
-      {useChartBreakdown ? (
-        dimensions.map((dim, i) => {
-          const otherDim = dimensions[1 - i]
-          const f = filterFor(dim)
-          const bars = sortRows(chartBarsFor(dim, otherDim), sortKey, sortDir)
-          const chartSelected = bars.some((b) => b.key === selectedKey) ? selectedKey : null
-          return (
-            <div key={dim} style={{ marginBottom: 24 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
-                <div style={{ fontSize: 13, fontWeight: 700 }}>{otherDim} <span style={{ fontWeight: 400, color: 'var(--muted)', opacity: 0.7 }}>by {dim.toLowerCase()}</span></div>
-                <select value={f} onChange={(e) => setFilterFor(dim, e.target.value)} style={selectStyle}>
-                  <option value="ALL">All {dim}</option>
-                  {sortRows(topRows.filter((r) => r.dimension === dim), 'label', 'asc').map((r) => (
-                    <option key={r.key} value={r.key}>{r.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div style={{ display: 'flex', gap: 10, marginBottom: 6, fontSize: 11, color: 'var(--muted)' }}>
-                <span>Sort:</span>
-                <button className={`sortable-header ${sortKey === 'label' ? 'active' : ''}`} onClick={() => toggleSort('label')} style={headerBtnStyle(null)}>Name {sortIndicator('label')}</button>
-                <button className={`sortable-header ${sortKey === 'accuracy' ? 'active' : ''}`} onClick={() => toggleSort('accuracy')} style={headerBtnStyle(null)}>Accuracy {sortIndicator('accuracy')}</button>
-                <button className={`sortable-header ${sortKey === 'avgTimeMs' ? 'active' : ''}`} onClick={() => toggleSort('avgTimeMs')} style={headerBtnStyle(null)}>Speed {sortIndicator('avgTimeMs')}</button>
-              </div>
-              <BarChart bars={bars} selectedKey={chartSelected} onBarClick={selectRow} />
-              {chartSelected && childrenOf(chartSelected).length === 0 && transitionsPanel(chartSelected)}
+      {/* Breakdown — every dimension (Chord Type, Root, …) shown as its own
+          section at once, instead of switching between them one at a time.
+          Clicking a row (e.g. root "B") opens a bar chart of its own
+          tracked children (its chord types) right underneath — a chart
+          instead of another stack of nested list rows. */}
+      {sections.map((sec) => {
+        const sorted = sortRows(sec.rows, sortKey, sortDir)
+        const expanded = isExpanded(sec.id)
+        const visible = expanded ? sorted : sorted.slice(0, COLLAPSED_ROWS)
+        return (
+          <div key={sec.id} style={{ marginBottom: 24 }}>
+            {sec.title && <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>{sec.title}</div>}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 8px', marginBottom: 4, fontSize: 11, color: 'var(--muted)' }}>
+              <div style={{ width: 12 }} />
+              <button className={`sortable-header ${sortKey === 'label' ? 'active' : ''}`} onClick={() => toggleSort('label')} style={headerBtnStyle(130)}>Item {sortIndicator('label')}</button>
+              <button className={`sortable-header ${sortKey === 'accuracy' ? 'active' : ''}`} onClick={() => toggleSort('accuracy')} style={{ ...headerBtnStyle(null), flex: 1 }}>Accuracy {sortIndicator('accuracy')}</button>
+              <div style={{ width: 82 }} />
+              <button className={`sortable-header ${sortKey === 'avgTimeMs' ? 'active' : ''}`} onClick={() => toggleSort('avgTimeMs')} style={headerBtnStyle(60)}>Speed {sortIndicator('avgTimeMs')}</button>
             </div>
-          )
-        })
-      ) : (
-        sections.map((sec) => {
-          const sorted = sortRows(sec.rows, sortKey, sortDir)
-          const expanded = isExpanded(sec.id)
-          const visible = expanded ? sorted : sorted.slice(0, COLLAPSED_ROWS)
-          return (
-            <div key={sec.id} style={{ marginBottom: 24 }}>
-              {sec.title && <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>{sec.title}</div>}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 8px', marginBottom: 4, fontSize: 11, color: 'var(--muted)' }}>
-                <div style={{ width: 12 }} />
-                <button className={`sortable-header ${sortKey === 'label' ? 'active' : ''}`} onClick={() => toggleSort('label')} style={headerBtnStyle(130)}>Item {sortIndicator('label')}</button>
-                <button className={`sortable-header ${sortKey === 'accuracy' ? 'active' : ''}`} onClick={() => toggleSort('accuracy')} style={{ ...headerBtnStyle(null), flex: 1 }}>Accuracy {sortIndicator('accuracy')}</button>
-                <div style={{ width: 82 }} />
-                <button className={`sortable-header ${sortKey === 'avgTimeMs' ? 'active' : ''}`} onClick={() => toggleSort('avgTimeMs')} style={headerBtnStyle(60)}>Speed {sortIndicator('avgTimeMs')}</button>
-              </div>
 
-              {sorted.length === 0 ? (
-                <div className="muted" style={{ padding: 8 }}>No data yet</div>
-              ) : (
-                <div>{visible.map((r) => renderRow(r, 0))}</div>
-              )}
+            {sorted.length === 0 ? (
+              <div className="muted" style={{ padding: 8 }}>No data yet</div>
+            ) : (
+              <div>{visible.map((r) => renderRow(r, 0))}</div>
+            )}
 
-              {sorted.length > COLLAPSED_ROWS && (
-                <button className="play-cat-btn" style={{ marginTop: 8 }} onClick={() => toggleExpanded(sec.id)}>
-                  {expanded ? 'Show less' : `Show all ${sorted.length}`}
-                </button>
-              )}
-            </div>
-          )
-        })
-      )}
+            {sorted.length > COLLAPSED_ROWS && (
+              <button className="play-cat-btn" style={{ marginTop: 8 }} onClick={() => toggleExpanded(sec.id)}>
+                {expanded ? 'Show less' : `Show all ${sorted.length}`}
+              </button>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
