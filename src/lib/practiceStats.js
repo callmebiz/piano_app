@@ -1,5 +1,6 @@
 // Shared practice-stats engine for every exercise app (Identify's 5
-// exercises, Play The Chord). Three things live side by side per exercise:
+// exercises, Ear Training's 4, Play The Chord, Scales). Four things live
+// side by side per exercise:
 //
 // - A lifetime aggregate per "bucket" (an opaque caller-defined key, e.g.
 //   one per prompt for Identify, or type/root/chord for Play The Chord) —
@@ -21,6 +22,14 @@
 //   and count so storage never grows unbounded. "Best ever" streak/trend
 //   values are therefore really "best within the retained window", not
 //   truly all-time; that's a deliberate trade for bounded local storage.
+// - A raw fact table (recordFact/crossTab, below) — one row per attempt
+//   with every tracked dimension as its own field, plus attemptNumber (the
+//   1-indexed count of this exact prompt, read off its permanent lifetime
+//   bucket so it stays accurate even once old fact rows themselves age
+//   out). Lets a caller cross ANY combination of tracked dimensions, or
+//   plot accuracy/speed against attempt number, as a query instead of
+//   something that has to be pre-decided at record time the way buckets
+//   are.
 
 const STORAGE_KEY = 'practicestats:v1'
 const RETENTION_DAYS = 90
@@ -171,8 +180,38 @@ function backfillFactsIfNeeded(store) {
   return store
 }
 
+// One-time backfill of `attemptNumber` for any existing fact rows that
+// predate it — assigns each prompt's own facts a 1-indexed sequence in
+// chronological order, i.e. exactly "inferred by the total count" once,
+// so every fact going forward can just read its number off the (already
+// incrementing) lifetime bucket instead of re-deriving it by counting.
+// Array.sort is stable, so facts sharing an identical timestamp (e.g. the
+// synthetic backfilled rows above, all stamped in the same instant) keep
+// their original push order — which for that backfill loop already IS the
+// correct sequence.
+function backfillAttemptNumbersIfNeeded(store) {
+  if (store.attemptNumbersBackfilledV1) return store
+  try {
+    for (const facts of Object.values(store.facts || {})) {
+      const byPrompt = {}
+      for (const f of facts) {
+        if (!f.promptKey) continue
+        byPrompt[f.promptKey] = byPrompt[f.promptKey] || []
+        byPrompt[f.promptKey].push(f)
+      }
+      for (const group of Object.values(byPrompt)) {
+        group.sort((a, b) => a.ts - b.ts)
+        group.forEach((f, i) => { f.attemptNumber = i + 1 })
+      }
+    }
+  } catch (e) {}
+  store.attemptNumbersBackfilledV1 = true
+  return store
+}
+
 let store = migrateLegacyIfNeeded(loadStore())
 store = backfillFactsIfNeeded(store)
+store = backfillAttemptNumbersIfNeeded(store)
 saveStore(store)
 
 function pruneEvents(list) {
@@ -334,6 +373,16 @@ export function recordFact({ exercise, correct, timeMs, fields = {}, promptKey, 
   }
   if (promptKey) lastPromptKeyByExercise[exercise] = promptKey
 
+  // Which attempt NUMBER this is for this specific prompt (1st time you've
+  // ever played this exact chord, 2nd, 3rd, …) — for a future "accuracy/
+  // speed vs. attempt number" learning-curve chart. Read straight from the
+  // promptKey's own lifetime bucket, which recordAttempt above just
+  // incremented and which is never pruned — so this stays a true
+  // 1-indexed count forever, even once the raw fact table itself starts
+  // aging old rows out (pruneFacts below).
+  const promptBucket = promptKey && store.lifetime[exercise] ? store.lifetime[exercise][promptKey] : null
+  const attemptNumber = promptBucket ? promptBucket.attempts : null
+
   store.facts[exercise] = store.facts[exercise] || []
   store.facts[exercise].push({
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -342,6 +391,7 @@ export function recordFact({ exercise, correct, timeMs, fields = {}, promptKey, 
     timeMs: typeof timeMs === 'number' ? timeMs : null,
     promptKey: promptKey || null,
     promptLabel: promptLabel || null,
+    attemptNumber,
     fields
   })
   store.facts[exercise] = pruneFacts(store.facts[exercise])
@@ -350,6 +400,20 @@ export function recordFact({ exercise, correct, timeMs, fields = {}, promptKey, 
 
 export function getFacts(exercise) {
   return (store.facts[exercise] || []).slice()
+}
+
+// -> [{ attemptNumber, correct, timeMs, ts }] for one specific prompt,
+// oldest first — the raw series a "accuracy/speed vs. attempt number"
+// learning-curve chart would plot. Only draws from the (pruned) raw fact
+// table, so very old attempts on a prompt you haven't touched in 90+ days
+// may be missing from the front of the series even though attemptNumber
+// itself keeps counting from the permanent lifetime total.
+export function getAttemptSeries(exercise, promptKey) {
+  const facts = store.facts[exercise] || []
+  return facts
+    .filter((f) => f.promptKey === promptKey && f.attemptNumber != null)
+    .map((f) => ({ attemptNumber: f.attemptNumber, correct: f.correct, timeMs: f.timeMs, ts: f.ts }))
+    .sort((a, b) => a.attemptNumber - b.attemptNumber)
 }
 
 // -> { [fieldKey]: dimensionLabel } — every field that's actually present
