@@ -247,12 +247,19 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
   const [showStats, setShowStats] = useState(false)
   // Auto-tracking, always on by default — no Start/Stop needed. A viewer
   // can still switch it off (e.g. just noodling) via the tracking toggle.
+  // A distinct storage key from the old 'play:trackStats' on purpose: that
+  // one holds whatever leftover value the old Start/Stop flow happened to
+  // set (almost always "false" for anyone who used this app before this
+  // change, since the old default was off-until-Start) — reusing it would
+  // have silently kept tracking off for every existing user despite the
+  // new default, with no visible sign why. A fresh key just defaults
+  // cleanly to on for everyone, exactly once.
   const loadTrackStats = () => {
-    try { const raw = localStorage.getItem('play:trackStats'); if (raw) return JSON.parse(raw) } catch(e){}
+    try { const raw = localStorage.getItem('play:autoTrackStats'); if (raw) return JSON.parse(raw) } catch(e){}
     return true
   }
   const [trackStats, setTrackStats] = useState(loadTrackStats)
-  useEffect(() => { try { localStorage.setItem('play:trackStats', JSON.stringify(trackStats)) } catch(e){} }, [trackStats])
+  useEffect(() => { try { localStorage.setItem('play:autoTrackStats', JSON.stringify(trackStats)) } catch(e){} }, [trackStats])
 
   // One continuous practice stretch's ID — regenerated whenever an idle gap
   // is detected (see recordRound below), so facts naturally fall into

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react'
-import { getLifetimeStats, resetLifetimeStats, getDailyTrend, getStreak, getTransitions, getOverallStats, getAvailableFields, crossTab } from '../lib/practiceStats'
+import { getLifetimeStats, resetLifetimeStats, getDailyTrend, getStreak, getTransitions, getOverallStats, getAvailableFields, crossTab, getFacts } from '../lib/practiceStats'
 
 const TREND_DAYS = 14
 const COLLAPSED_ROWS = 8
@@ -343,6 +343,106 @@ function Explore({ exercise }) {
   )
 }
 
+const thStyle = { padding: '4px 8px', textAlign: 'left', color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap', borderBottom: '1px solid rgba(255,255,255,0.06)' }
+const tdStyle = { padding: '4px 8px', whiteSpace: 'nowrap' }
+const DETAILS_SESSIONS_PAGE = 3
+
+// The raw underlying record, session by session — collapsed behind a
+// toggle since most viewers just want the summarized breakdowns above,
+// but there whenever someone wants to check that a specific attempt
+// actually got captured (and, for auto-tracking, whether it was excluded
+// from speed as a detected idle gap — that shows up here as a ✓ result
+// with a "—" Speed, rather than being invisible). A "session" is just a
+// maximal run of consecutive facts (once sorted newest-first) sharing the
+// same sessionId — real session boundaries only ever happen at a detected
+// idle gap, so contiguous-in-time already means contiguous-in-session.
+function Details({ exercise }) {
+  const [open, setOpen] = useState(false)
+  const [visibleSessions, setVisibleSessions] = useState(DETAILS_SESSIONS_PAGE)
+
+  if (!open) {
+    return <div style={{ marginBottom: 24 }}><button className="play-cat-btn" onClick={() => setOpen(true)}>Show Details</button></div>
+  }
+
+  const facts = getFacts(exercise).sort((a, b) => b.ts - a.ts)
+  const fieldKeysSeen = Array.from(new Set(facts.flatMap((f) => Object.keys(f.fields || {}))))
+
+  const sessions = []
+  for (const f of facts) {
+    const last = sessions[sessions.length - 1]
+    if (last && last.sessionId === f.sessionId) last.facts.push(f)
+    else sessions.push({ sessionId: f.sessionId, facts: [f] })
+  }
+  for (const s of sessions) {
+    s.correct = s.facts.filter((f) => f.correct).length
+    s.attempts = s.facts.length
+    s.accuracy = s.attempts > 0 ? (s.correct / s.attempts) * 100 : 0
+    s.start = s.facts[s.facts.length - 1].ts
+    s.end = s.facts[0].ts
+  }
+  const shown = sessions.slice(0, visibleSessions)
+  const remaining = sessions.length - shown.length
+
+  const fmtTime = (ts) => new Date(ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+  const fmtTimeShort = (ts) => new Date(ts).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ fontSize: 13, fontWeight: 700 }}>
+          Details <span style={{ fontWeight: 400, color: 'var(--muted)', opacity: 0.7 }}>({facts.length} recorded {facts.length === 1 ? 'attempt' : 'attempts'} across {sessions.length} {sessions.length === 1 ? 'session' : 'sessions'})</span>
+        </div>
+        <button className="play-cat-btn" onClick={() => setOpen(false)}>Hide Details</button>
+      </div>
+
+      {facts.length === 0 ? (
+        <div className="muted" style={{ padding: 8 }}>No data yet</div>
+      ) : (
+        <>
+          {shown.map((s) => (
+            <div key={s.sessionId || s.start} style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>
+                {fmtTime(s.start)}{s.end !== s.start ? ` – ${fmtTimeShort(s.end)}` : ''} · {s.attempts} attempt{s.attempts === 1 ? '' : 's'} · {Math.round(s.accuracy)}% accuracy
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ borderCollapse: 'collapse', fontSize: 11, width: '100%' }}>
+                  <thead>
+                    <tr>
+                      <th style={thStyle}>Time</th>
+                      <th style={thStyle}>Prompt</th>
+                      <th style={thStyle}>Result</th>
+                      <th style={thStyle}>Speed</th>
+                      <th style={thStyle}>#</th>
+                      {fieldKeysSeen.map((k) => <th key={k} style={thStyle}>{k}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {s.facts.map((f) => (
+                      <tr key={f.id}>
+                        <td style={tdStyle}>{fmtTimeShort(f.ts)}</td>
+                        <td style={tdStyle}>{f.promptLabel || f.promptKey || '—'}</td>
+                        <td style={{ ...tdStyle, color: f.correct ? 'var(--accent)' : '#ff8a80' }}>{f.correct ? '✓' : '✗'}</td>
+                        <td style={tdStyle}>{fmtMs(f.timeMs)}</td>
+                        <td style={tdStyle}>{f.attemptNumber ?? '—'}</td>
+                        {fieldKeysSeen.map((k) => <td key={k} style={tdStyle}>{f.fields && f.fields[k] ? f.fields[k].label : '—'}</td>)}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
+          {remaining > 0 && (
+            <button className="play-cat-btn" onClick={() => setVisibleSessions((n) => n + DETAILS_SESSIONS_PAGE)}>
+              Show {Math.min(DETAILS_SESSIONS_PAGE, remaining)} more session{Math.min(DETAILS_SESSIONS_PAGE, remaining) === 1 ? '' : 's'}
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 // Shared stats dashboard for every exercise app (Identify's 5 exercises,
 // Ear Training's 4, Play The Chord, Scales): headline KPI cards, a daily
 // accuracy trend, and a breakdown list. Buckets sharing a `dimension` (e.g.
@@ -671,6 +771,8 @@ export default function StatsModal({ exercise, title, open, onClose = () => {} }
           </div>
         )
       })}
+
+      <Details exercise={exercise} key={exercise} />
     </div>
   )
 }
