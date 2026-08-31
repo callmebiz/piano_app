@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react'
-import { getLifetimeStats, resetLifetimeStats, getDailyTrend, getStreak, getTransitions, getOverallStats } from '../lib/practiceStats'
+import { getLifetimeStats, resetLifetimeStats, getDailyTrend, getStreak, getTransitions, getOverallStats, getAvailableFields, crossTab } from '../lib/practiceStats'
 
 const TREND_DAYS = 14
 const COLLAPSED_ROWS = 8
@@ -96,6 +96,125 @@ function BarChart({ bars, selectedKey, onBarClick, height = 120 }) {
           ))}
         </div>
       </div>
+    </div>
+  )
+}
+
+const selectStyle = {
+  background: 'rgba(255,255,255,0.04)', color: 'inherit', border: '1px solid rgba(255,255,255,0.1)',
+  borderRadius: 6, padding: '5px 8px', fontSize: 12, fontFamily: 'inherit', cursor: 'pointer'
+}
+
+// Cross any two tracked dimensions as a color-coded matrix — rows = one
+// field's values, columns = the other's, each cell = that combo's own
+// accuracy (color) and attempts (opacity, so thin-sample cells read as
+// less certain, same idea as the trend chart dimming low-attempt days).
+// `combos` is a crossTab() result for exactly [fieldA, fieldB].
+function Heatmap({ combos, fieldA, fieldB, labelA, labelB, selectedKey, onSelect }) {
+  const aMap = new Map()
+  const bMap = new Map()
+  for (const c of combos) {
+    if (!aMap.has(c.dims[fieldA])) aMap.set(c.dims[fieldA], c.fieldLabels[fieldA])
+    if (!bMap.has(c.dims[fieldB])) bMap.set(c.dims[fieldB], c.fieldLabels[fieldB])
+  }
+  const aVals = Array.from(aMap, ([value, label]) => ({ value, label })).sort((x, y) => String(x.label).localeCompare(String(y.label)))
+  const bVals = Array.from(bMap, ([value, label]) => ({ value, label })).sort((x, y) => String(x.label).localeCompare(String(y.label)))
+  if (aVals.length === 0 || bVals.length === 0) return <div className="muted" style={{ padding: 8 }}>No data yet for this combination</div>
+  const cellFor = (av, bv) => combos.find((c) => c.dims[fieldA] === av && c.dims[fieldB] === bv)
+  const maxAttempts = Math.max(1, ...combos.map((c) => c.attempts))
+
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ borderCollapse: 'collapse', fontSize: 11 }}>
+        <thead>
+          <tr>
+            <th style={{ padding: '4px 8px', textAlign: 'left', color: 'var(--muted)', fontWeight: 600 }}>{labelA} \ {labelB}</th>
+            {bVals.map((b) => (
+              <th key={b.value} style={{ padding: '4px 6px', color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>{b.label}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {aVals.map((a) => (
+            <tr key={a.value}>
+              <td style={{ padding: '4px 8px', color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>{a.label}</td>
+              {bVals.map((b) => {
+                const c = cellFor(a.value, b.value)
+                return (
+                  <td key={b.value} style={{ padding: 2 }}>
+                    {c ? (
+                      <div
+                        onClick={() => onSelect(c.key)}
+                        title={`${a.label} · ${b.label}: ${Math.round(c.accuracy)}% (${c.correct}/${c.attempts})`}
+                        style={{
+                          width: 44, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          background: accuracyColor(c.accuracy), opacity: Math.max(0.35, c.attempts / maxAttempts),
+                          color: '#071025', fontWeight: 700, borderRadius: 4, cursor: 'pointer',
+                          outline: selectedKey === c.key ? '2px solid var(--accent)' : 'none', outlineOffset: 1
+                        }}
+                      >
+                        {Math.round(c.accuracy)}
+                      </div>
+                    ) : (
+                      <div style={{ width: 44, height: 28, borderRadius: 4, background: 'rgba(255,255,255,0.02)' }} />
+                    )}
+                  </td>
+                )
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+// Pick any two tracked dimensions and cross them, instead of only ever
+// seeing whichever pairs an app happened to hand-build buckets for. Fully
+// self-contained (its own field-pair + selected-cell state) — a crossTab
+// combo isn't a bucket in the lifetime tree, so it doesn't try to drive
+// the shared KPI header or transitions panel above; it shows its own
+// numbers for the selected cell right here instead.
+function Explore({ exercise }) {
+  const fields = useMemo(() => getAvailableFields(exercise), [exercise])
+  const fieldKeys = Object.keys(fields)
+  const [fieldA, setFieldA] = useState(fieldKeys[0] || '')
+  const [fieldB, setFieldB] = useState(fieldKeys[1] || fieldKeys[0] || '')
+  const [selectedKey, setSelectedKey] = useState(null)
+
+  if (fieldKeys.length < 2) return null // nothing to cross yet
+
+  const combos = crossTab(exercise, [fieldA, fieldB])
+  const selected = combos.find((c) => c.key === selectedKey) || null
+
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Explore</div>
+      <div style={{ fontSize: 11, color: 'var(--muted)', opacity: 0.8, marginBottom: 10 }}>Cross any two tracked dimensions — not just the breakdowns above.</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+        <select value={fieldA} onChange={(e) => { setFieldA(e.target.value); setSelectedKey(null) }} style={selectStyle}>
+          {fieldKeys.map((k) => <option key={k} value={k}>{fields[k]}</option>)}
+        </select>
+        <span style={{ color: 'var(--muted)', fontSize: 12 }}>×</span>
+        <select value={fieldB} onChange={(e) => { setFieldB(e.target.value); setSelectedKey(null) }} style={selectStyle}>
+          {fieldKeys.map((k) => <option key={k} value={k}>{fields[k]}</option>)}
+        </select>
+      </div>
+      {fieldA === fieldB ? (
+        <div className="muted" style={{ padding: 8 }}>Pick two different dimensions to cross.</div>
+      ) : (
+        <>
+          <Heatmap combos={combos} fieldA={fieldA} fieldB={fieldB} labelA={fields[fieldA]} labelB={fields[fieldB]} selectedKey={selectedKey} onSelect={(k) => setSelectedKey((s) => (s === k ? null : k))} />
+          {selected && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 10, fontSize: 12, color: 'var(--muted)' }}>
+              <strong style={{ color: 'inherit', fontWeight: 700 }}>{selected.label}</strong>
+              <span>{Math.round(selected.accuracy)}% ({selected.correct}/{selected.attempts})</span>
+              <span>{fmtMs(selected.avgTimeMs)} avg</span>
+              <button className="play-cat-btn" style={{ padding: '2px 8px', fontSize: 11 }} onClick={() => setSelectedKey(null)}>Clear</button>
+            </div>
+          )}
+        </>
+      )}
     </div>
   )
 }
@@ -373,6 +492,8 @@ export default function StatsModal({ exercise, title, open, onClose = () => {} }
           </div>
         )
       })}
+
+      <Explore exercise={exercise} key={exercise} />
     </div>
   )
 }

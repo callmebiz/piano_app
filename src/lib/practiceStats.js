@@ -25,6 +25,7 @@
 const STORAGE_KEY = 'practicestats:v1'
 const RETENTION_DAYS = 90
 const MAX_EVENTS_PER_EXERCISE = 3000
+const MAX_FACTS_PER_EXERCISE = 4000
 
 function loadStore() {
   try {
@@ -32,10 +33,11 @@ function loadStore() {
     if (raw) {
       const s = JSON.parse(raw)
       s.transitions = s.transitions || {}
+      s.facts = s.facts || {}
       return s
     }
   } catch (e) {}
-  return { lifetime: {}, events: {}, transitions: {} }
+  return { lifetime: {}, events: {}, transitions: {}, facts: {} }
 }
 
 function saveStore(store) {
@@ -124,6 +126,19 @@ function pruneEvents(list) {
   return pruned
 }
 
+function pruneFacts(list) {
+  const cutoff = Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000
+  let pruned = list.filter((f) => f.ts >= cutoff)
+  if (pruned.length > MAX_FACTS_PER_EXERCISE) pruned = pruned.slice(pruned.length - MAX_FACTS_PER_EXERCISE)
+  return pruned
+}
+
+// Which specific prompt (promptKey) an exercise's most recent recordFact()
+// call was — lives here instead of in each app's own ref, so a caller no
+// longer has to track "what came before this" itself just to get
+// transition timing.
+const lastPromptKeyByExercise = {}
+
 // buckets: [{ key, label, parent?, dimension? }] — every bucket this one
 // attempt counts toward. correct: boolean. timeMs: number|null (null if
 // untimed). `dimension` (optional) groups top-level (no-parent) buckets
@@ -207,7 +222,128 @@ export function resetLifetimeStats(exercise) {
   delete store.lifetime[exercise]
   delete store.events[exercise]
   delete store.transitions[exercise]
+  delete store.facts[exercise]
+  delete lastPromptKeyByExercise[exercise]
   saveStore(store)
+}
+
+// --- Fact table: one raw row per attempt, every dimension as a field ---
+// The bucket/dimension/parent shape above is a set of pre-decided rollups —
+// great for permanent all-time totals, but every NEW way of slicing the
+// data (e.g. "chord type crossed with root, simultaneously") needs new
+// bucket-building code wherever it's called. recordFact takes the opposite
+// approach: the caller reports raw facts (what happened, and which
+// dimension values applied), and ANY combination of those dimensions can
+// be crossed later via crossTab() — a query, not a feature to build.
+//
+// `fields`: { [fieldKey]: { value, label, dimension } } — value is the
+// caller's own opaque grouping key (e.g. a chord type slug or a root pitch
+// class number), label is how it's displayed, dimension is the
+// human-readable axis name (e.g. "Chord Type"). Sparse: an exercise only
+// populates whichever fields actually apply to it.
+//
+// recordFact still drives the existing, already-reliable lifetime/events/
+// transitions rollups underneath (via recordAttempt) — it just builds that
+// bucket list FOR you from `fields`, instead of requiring the caller to
+// hand-construct dimension buckets and a parent-linked leaf bucket the way
+// Play The Chord and Scales used to. It also tracks fromKey internally
+// (lastPromptKeyByExercise) so callers no longer need their own ref for
+// "what was the previous prompt".
+export function recordFact({ exercise, correct, timeMs, fields = {}, promptKey, promptLabel }) {
+  if (!exercise) return
+
+  const fieldEntries = Object.entries(fields).filter(([, v]) => v && v.value != null)
+
+  const buckets = fieldEntries.map(([fieldKey, v]) => ({
+    key: `${fieldKey}:${v.value}`,
+    label: v.label != null ? v.label : String(v.value),
+    dimension: v.dimension || null
+  }))
+  if (promptKey) {
+    buckets.push({
+      key: promptKey,
+      label: promptLabel || promptKey,
+      parent: fieldEntries.map(([fieldKey, v]) => `${fieldKey}:${v.value}`)
+    })
+  }
+  if (buckets.length > 0) {
+    recordAttempt({
+      exercise,
+      buckets,
+      correct,
+      timeMs,
+      primaryKey: promptKey || null,
+      fromKey: promptKey ? lastPromptKeyByExercise[exercise] || null : null
+    })
+  }
+  if (promptKey) lastPromptKeyByExercise[exercise] = promptKey
+
+  store.facts[exercise] = store.facts[exercise] || []
+  store.facts[exercise].push({
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    ts: Date.now(),
+    correct: !!correct,
+    timeMs: typeof timeMs === 'number' ? timeMs : null,
+    promptKey: promptKey || null,
+    promptLabel: promptLabel || null,
+    fields
+  })
+  store.facts[exercise] = pruneFacts(store.facts[exercise])
+  saveStore(store)
+}
+
+export function getFacts(exercise) {
+  return (store.facts[exercise] || []).slice()
+}
+
+// -> { [fieldKey]: dimensionLabel } — every field that's actually present
+// on at least one recorded fact for this exercise, so a UI can offer "pick
+// a dimension" without hardcoding which ones an exercise happens to have.
+export function getAvailableFields(exercise) {
+  const facts = store.facts[exercise] || []
+  const out = {}
+  for (const f of facts) {
+    for (const [k, v] of Object.entries(f.fields || {})) {
+      if (v && v.dimension && !out[k]) out[k] = v.dimension
+    }
+  }
+  return out
+}
+
+// Generic N-dimensional group-by over the raw fact table — cross ANY 1+
+// fields together (fieldKeys), not just whichever pairs an app happened to
+// pre-build buckets for. Facts missing any of the requested fields are
+// skipped (they don't apply to that slice). Returns one row per combo of
+// values actually observed, each carrying both the combined label and the
+// per-field label/value (so a 2D UI can build row/column axes without
+// re-deriving anything).
+export function crossTab(exercise, fieldKeys) {
+  if (!Array.isArray(fieldKeys) || fieldKeys.length === 0) return []
+  const facts = store.facts[exercise] || []
+  const groups = {}
+  for (const f of facts) {
+    const vals = fieldKeys.map((k) => f.fields && f.fields[k])
+    if (vals.some((v) => !v || v.value == null)) continue
+    const comboKey = fieldKeys.map((k, i) => `${k}=${vals[i].value}`).join('|')
+    if (!groups[comboKey]) {
+      groups[comboKey] = {
+        key: comboKey,
+        label: vals.map((v) => v.label).join(' · '),
+        dims: Object.fromEntries(fieldKeys.map((k, i) => [k, vals[i].value])),
+        fieldLabels: Object.fromEntries(fieldKeys.map((k, i) => [k, vals[i].label])),
+        attempts: 0, correct: 0, totalTimeMs: 0
+      }
+    }
+    const g = groups[comboKey]
+    g.attempts += 1
+    if (f.correct) g.correct += 1
+    if (f.correct && typeof f.timeMs === 'number') g.totalTimeMs += f.timeMs
+  }
+  return Object.values(groups).map((g) => ({
+    ...g,
+    accuracy: g.attempts > 0 ? (g.correct / g.attempts) * 100 : 0,
+    avgTimeMs: g.correct > 0 ? g.totalTimeMs / g.correct : null
+  }))
 }
 
 export function getEvents(exercise) {

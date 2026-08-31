@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState, useRef } from 'react'
 import { getTemplates, ROOTS, pcsToNotes, chordFormulas } from '../../lib/chords'
 import { formatMatch } from '../../lib/chords'
 import useHoldToSkip from '../../hooks/useHoldToSkip'
-import { recordAttempt } from '../../lib/practiceStats'
+import { recordFact } from '../../lib/practiceStats'
 import StatsModal from '../../components/StatsModal'
 
 function randomInt(max) { return Math.floor(Math.random() * max) }
@@ -490,30 +490,29 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
   // list of allowed templates with root == C (0) for display when filters change
   const allowedForC = useMemo(() => (allowedTemplates || []).filter(t => t.root === 0), [allowedTemplates])
 
-  // Which specific chord (type@root) the previous tracked round was —
-  // powers transition timing ("how fast after X do I get Y").
-  const lastChordKeyRef = useRef(null)
-
+  // Field keys ("type"/"root") match what this app has always used for its
+  // bucket keys (`type:${t}`, `root:${r}`, `chord:${t}@${r}`) — recordFact
+  // builds the exact same buckets from these, so existing lifetime totals
+  // keep accumulating on the same keys instead of starting over under new
+  // ones. recordFact also tracks the previous prompt itself now, so no
+  // more lastChordKeyRef here.
   const recordRound = (tmpl, correct, timeMs) => {
     if (!tmpl) return
     if (!trackStats) return
     const t = tmpl.type
     const r = tmpl.root
     const fm = formatMatch({ root: r, rootName: ROOTS[r], type: t, chordSize: (chordFormulas[t] || []).length }, [])
-    const chordKey = `chord:${t}@${r}`
-    recordAttempt({
+    recordFact({
       exercise: 'play',
-      buckets: [
-        { key: `type:${t}`, label: fm.longName, dimension: 'Chord Type' },
-        { key: `root:${r}`, label: ROOTS[r], dimension: 'Root' },
-        { key: chordKey, label: fm.displayName, parent: [`root:${r}`, `type:${t}`] }
-      ],
       correct,
       timeMs,
-      primaryKey: chordKey,
-      fromKey: lastChordKeyRef.current
+      promptKey: `chord:${t}@${r}`,
+      promptLabel: fm.displayName,
+      fields: {
+        type: { value: t, label: fm.longName, dimension: 'Chord Type' },
+        root: { value: r, label: ROOTS[r], dimension: 'Root' }
+      }
     })
-    lastChordKeyRef.current = chordKey
   }
 
   // compute pressed PCs from pressedNotes (Set or Array)

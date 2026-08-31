@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState, useRef, Suspense, lazy } from 'rea
 import { SCALE_TYPES, scaleLongNames, buildScaleSequence, buildTwoHandSequence, buildDegreeLabels, buildScaleSpelling, scaleDisplayName, ROOTS, MAX_OCTAVES } from '../../lib/scales'
 import useHoldToSkip from '../../hooks/useHoldToSkip'
 import { useStaffSettings } from '../../lib/staffSettings'
-import { recordAttempt } from '../../lib/practiceStats'
+import { recordFact } from '../../lib/practiceStats'
 import StatsModal from '../../components/StatsModal'
 
 // Staff.jsx pulls in VexFlow (~1.1MB) — Scales isn't lazy-loaded at the
@@ -209,29 +209,28 @@ export default function Scales({ pressedNotes, setKeyboardTargetPCs = () => {} }
     }
   }, [trackStats])
 
-  // Which specific scale (type@root) the previous tracked round was —
-  // powers transition timing ("how fast after X do I get Y").
-  const lastScaleKeyRef = useRef(null)
-
+  // Field keys ("type"/"root") match what this app has always used for its
+  // bucket keys (`type:${t}`, `root:${r}`, `scale:${t}@${r}`) — recordFact
+  // builds the exact same buckets from these, so existing lifetime totals
+  // keep accumulating on the same keys instead of starting over under new
+  // ones. recordFact also tracks the previous prompt itself now, so no
+  // more lastScaleKeyRef here.
   const recordRound = (combo, correct, timeMs) => {
     if (!combo) return
     if (!trackStats) return
     const t = combo.type
     const r = combo.root
-    const scaleKey = `scale:${t}@${r}`
-    recordAttempt({
+    recordFact({
       exercise: 'scales',
-      buckets: [
-        { key: `type:${t}`, label: scaleLongNames[t], dimension: 'Scale Type' },
-        { key: `root:${r}`, label: ROOTS[r], dimension: 'Root' },
-        { key: scaleKey, label: scaleDisplayName(r, t), parent: [`root:${r}`, `type:${t}`] }
-      ],
       correct,
       timeMs,
-      primaryKey: scaleKey,
-      fromKey: lastScaleKeyRef.current
+      promptKey: `scale:${t}@${r}`,
+      promptLabel: scaleDisplayName(r, t),
+      fields: {
+        type: { value: t, label: scaleLongNames[t], dimension: 'Scale Type' },
+        root: { value: r, label: ROOTS[r], dimension: 'Root' }
+      }
     })
-    lastScaleKeyRef.current = scaleKey
   }
 
   // number of notes currently held (used to know when the player has released everything)
