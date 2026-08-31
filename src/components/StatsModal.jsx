@@ -31,6 +31,16 @@ function sortRows(rows, sortKey, sortDir) {
 
 const accuracyColor = (pct) => (pct >= 85 ? 'var(--accent)' : pct >= 60 ? '#ffd24a' : '#ff8a80')
 const fmtMs = (ms) => (ms == null ? '—' : ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms)}ms`)
+// Speed has no universal "good" threshold the way accuracy does (85%+ is
+// always good; 2s is fast for one chord and slow for another) — so color
+// it relative to the fastest/slowest actually observed in the current
+// slice, same 3-tier green/yellow/red language as accuracy.
+const speedColor = (ms, minMs, maxMs) => {
+  if (ms == null) return 'rgba(255,255,255,0.12)'
+  if (maxMs === minMs) return 'var(--accent)'
+  const t = (ms - minMs) / (maxMs - minMs) // 0 = fastest, 1 = slowest
+  return t <= 0.4 ? 'var(--accent)' : t <= 0.7 ? '#ffd24a' : '#ff8a80'
+}
 
 function Kpi({ label, value, sub }) {
   return (
@@ -106,11 +116,13 @@ const selectStyle = {
 }
 
 // Cross any two tracked dimensions as a color-coded matrix — rows = one
-// field's values, columns = the other's, each cell = that combo's own
-// accuracy (color) and attempts (opacity, so thin-sample cells read as
-// less certain, same idea as the trend chart dimming low-attempt days).
-// `combos` is a crossTab() result for exactly [fieldA, fieldB].
-function Heatmap({ combos, fieldA, fieldB, labelA, labelB, selectedKey, onSelect }) {
+// field's values, columns = the other's. `metric` picks what each cell
+// shows and is colored by: 'accuracy' (colored absolutely — 85%+ is always
+// good) or 'speed' (colored relative to the fastest/slowest observed in
+// THIS slice, since there's no universal "good" response time). Attempts
+// still drive opacity either way, so thin-sample cells read as less
+// certain. `combos` is a crossTab() result for exactly [fieldA, fieldB].
+function Heatmap({ combos, fieldA, fieldB, labelA, labelB, metric, selectedKey, onSelect }) {
   const aMap = new Map()
   const bMap = new Map()
   for (const c of combos) {
@@ -122,6 +134,9 @@ function Heatmap({ combos, fieldA, fieldB, labelA, labelB, selectedKey, onSelect
   if (aVals.length === 0 || bVals.length === 0) return <div className="muted" style={{ padding: 8 }}>No data yet for this combination</div>
   const cellFor = (av, bv) => combos.find((c) => c.dims[fieldA] === av && c.dims[fieldB] === bv)
   const maxAttempts = Math.max(1, ...combos.map((c) => c.attempts))
+  const timedMs = combos.map((c) => c.avgTimeMs).filter((ms) => ms != null)
+  const minMs = timedMs.length > 0 ? Math.min(...timedMs) : 0
+  const maxMs = timedMs.length > 0 ? Math.max(...timedMs) : 0
 
   return (
     <div style={{ overflowX: 'auto' }}>
@@ -140,20 +155,22 @@ function Heatmap({ combos, fieldA, fieldB, labelA, labelB, selectedKey, onSelect
               <td style={{ padding: '4px 8px', color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>{a.label}</td>
               {bVals.map((b) => {
                 const c = cellFor(a.value, b.value)
+                const display = c ? (metric === 'speed' ? (c.avgTimeMs == null ? '—' : fmtMs(c.avgTimeMs)) : Math.round(c.accuracy)) : null
+                const color = c ? (metric === 'speed' ? speedColor(c.avgTimeMs, minMs, maxMs) : accuracyColor(c.accuracy)) : null
                 return (
                   <td key={b.value} style={{ padding: 2 }}>
                     {c ? (
                       <div
                         onClick={() => onSelect(c.key)}
-                        title={`${a.label} · ${b.label}: ${Math.round(c.accuracy)}% (${c.correct}/${c.attempts})`}
+                        title={`${a.label} · ${b.label}: ${Math.round(c.accuracy)}% (${c.correct}/${c.attempts}), ${fmtMs(c.avgTimeMs)} avg`}
                         style={{
                           width: 44, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          background: accuracyColor(c.accuracy), opacity: Math.max(0.35, c.attempts / maxAttempts),
-                          color: '#071025', fontWeight: 700, borderRadius: 4, cursor: 'pointer',
+                          background: color, opacity: Math.max(0.35, c.attempts / maxAttempts),
+                          color: '#071025', fontWeight: 700, fontSize: metric === 'speed' ? 10 : 11, borderRadius: 4, cursor: 'pointer',
                           outline: selectedKey === c.key ? '2px solid var(--accent)' : 'none', outlineOffset: 1
                         }}
                       >
-                        {Math.round(c.accuracy)}
+                        {display}
                       </div>
                     ) : (
                       <div style={{ width: 44, height: 28, borderRadius: 4, background: 'rgba(255,255,255,0.02)' }} />
@@ -180,6 +197,7 @@ function Explore({ exercise }) {
   const fieldKeys = Object.keys(fields)
   const [fieldA, setFieldA] = useState(fieldKeys[0] || '')
   const [fieldB, setFieldB] = useState(fieldKeys[1] || fieldKeys[0] || '')
+  const [metric, setMetric] = useState('accuracy')
   const [selectedKey, setSelectedKey] = useState(null)
 
   if (fieldKeys.length < 2) return null // nothing to cross yet
@@ -199,12 +217,16 @@ function Explore({ exercise }) {
         <select value={fieldB} onChange={(e) => { setFieldB(e.target.value); setSelectedKey(null) }} style={selectStyle}>
           {fieldKeys.map((k) => <option key={k} value={k}>{fields[k]}</option>)}
         </select>
+        <div style={{ display: 'flex', gap: 4, marginLeft: 8 }}>
+          <button className={`play-cat-btn ${metric === 'accuracy' ? 'active' : ''}`} style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => setMetric('accuracy')}>Accuracy</button>
+          <button className={`play-cat-btn ${metric === 'speed' ? 'active' : ''}`} style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => setMetric('speed')}>Speed</button>
+        </div>
       </div>
       {fieldA === fieldB ? (
         <div className="muted" style={{ padding: 8 }}>Pick two different dimensions to cross.</div>
       ) : (
         <>
-          <Heatmap combos={combos} fieldA={fieldA} fieldB={fieldB} labelA={fields[fieldA]} labelB={fields[fieldB]} selectedKey={selectedKey} onSelect={(k) => setSelectedKey((s) => (s === k ? null : k))} />
+          <Heatmap combos={combos} fieldA={fieldA} fieldB={fieldB} labelA={fields[fieldA]} labelB={fields[fieldB]} metric={metric} selectedKey={selectedKey} onSelect={(k) => setSelectedKey((s) => (s === k ? null : k))} />
           {selected && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 10, fontSize: 12, color: 'var(--muted)' }}>
               <strong style={{ color: 'inherit', fontWeight: 700 }}>{selected.label}</strong>
@@ -298,6 +320,7 @@ export default function StatsModal({ exercise, title, open, onClose = () => {} }
   }
 
   const handleReset = () => {
+    if (!window.confirm(`Reset all ${title} stats? This clears every recorded attempt, streak, and trend — it can't be undone.`)) return
     resetLifetimeStats(exercise)
     setSelectedKey(null)
     setRefreshSeq((n) => n + 1)

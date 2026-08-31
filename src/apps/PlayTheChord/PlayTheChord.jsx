@@ -542,10 +542,15 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
     let noExtras = true
     for (const p of pressedPCs) if (!targetPCs.has(p)) { noExtras = false; break }
 
-    // mark if any wrong pitch-class present during active rounds
-    if (roundActive) {
-      for (const p of pressedPCs) if (!targetPCs.has(p)) { setHadWrongPress(true); break }
-    }
+    // Mark if any wrong pitch-class is currently pressed — regardless of
+    // roundActive. A "round" (the countdown+hold-timer flow from Start) is
+    // only ever active for a single chord; every chord after that runs
+    // through the free-play path below, which has no other way to notice
+    // a wrong note at all. Gating this on roundActive meant free-play
+    // (the app's normal, default way of playing) never recorded a miss —
+    // every chord came out "correct" regardless of what was actually
+    // played. noExtras already computed the same check above; reuse it.
+    if (!noExtras) setHadWrongPress(true)
 
     // If currently all present and no extras, start or continue hold timer
     if (allPresent && noExtras) {
