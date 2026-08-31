@@ -499,10 +499,12 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
   const allowedForC = useMemo(() => (allowedTemplates || []).filter(t => t.root === 0), [allowedTemplates])
 
   // Which hand a chord was played with — inferred from its lowest currently
-  // held note, not asked for or configured: below C4 (MIDI 60) reads as
-  // left hand, C4 or above reads as right hand. A reasonable default for
+  // held note, not asked for or configured: below A3 (MIDI 57) reads as
+  // left hand, A3 or above reads as right hand. A reasonable default for
   // most chord voicings; doesn't try to account for wide-stretch or
   // deliberately-crossed-hands playing.
+  const RIGHT_HAND_FLOOR_MIDI = 57 // A3
+
   const lowestPressedMidi = () => {
     const arr = pressedNotes ? (Array.isArray(pressedNotes) ? pressedNotes : Array.from(pressedNotes)) : []
     return arr.length > 0 ? Math.min(...arr) : null
@@ -534,7 +536,7 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
     const r = tmpl.root
     const fm = formatMatch({ root: r, rootName: ROOTS[r], type: t, chordSize: (chordFormulas[t] || []).length }, [])
     const lowest = lowestPressedMidi()
-    const hand = lowest == null ? null : (lowest < 60 ? 'left' : 'right')
+    const hand = lowest == null ? null : (lowest < RIGHT_HAND_FLOOR_MIDI ? 'left' : 'right')
 
     const wasIdleGap = correct && typeof timeMs === 'number' && timeMs > getIdleThresholdMs('play')
     if (wasIdleGap) sessionIdRef.current = newSessionId()

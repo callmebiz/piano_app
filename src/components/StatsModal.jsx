@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { getLifetimeStats, resetLifetimeStats, getDailyTrend, getStreak, getTransitions, getOverallStats, getAvailableFields, crossTab, getFacts } from '../lib/practiceStats'
 
 const TREND_DAYS = 14
@@ -419,7 +419,7 @@ function Details({ exercise }) {
                   <tbody>
                     {s.facts.map((f) => (
                       <tr key={f.id}>
-                        <td style={tdStyle}>{fmtTimeShort(f.ts)}</td>
+                        <td style={tdStyle}>{fmtTime(f.ts)}</td>
                         <td style={tdStyle}>{f.promptLabel || f.promptKey || '—'}</td>
                         <td style={{ ...tdStyle, color: f.correct ? 'var(--accent)' : '#ff8a80' }}>{f.correct ? '✓' : '✗'}</td>
                         <td style={tdStyle}>{fmtMs(f.timeMs)}</td>
@@ -490,6 +490,15 @@ export default function StatsModal({ exercise, title, open, onClose = () => {} }
   const trend = useMemo(() => (open ? getDailyTrend(exercise, TREND_DAYS) : []), [open, exercise, refreshSeq])
   const streak = useMemo(() => (open ? getStreak(exercise) : null), [open, exercise, refreshSeq])
   const overall = useMemo(() => (open ? getOverallStats(exercise) : null), [open, exercise, refreshSeq])
+
+  // Escape closes the modal, same as the Close button or clicking the
+  // backdrop outside it.
+  useEffect(() => {
+    if (!open) return
+    const handler = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [open, onClose])
 
   if (!open) return null
 
@@ -651,9 +660,17 @@ export default function StatsModal({ exercise, title, open, onClose = () => {} }
   }
 
   return (
-    <div className="stats-modal">
-      <h3>{title} — Stats</h3>
-      <button className="close-btn" onClick={onClose}>Close</button>
+    <>
+      {/* A separate sibling, not a wrapper — the modal box sits above it
+          (higher z-index) and only covers its own centered area, so a
+          click anywhere outside that box hits this backdrop underneath
+          and closes the modal, while a click inside the box never reaches
+          it at all (it's the topmost element there), no stopPropagation
+          needed. */}
+      <div className="stats-modal-backdrop" onClick={onClose} />
+      <div className="stats-modal">
+        <h3>{title} — Stats</h3>
+        <button className="close-btn" onClick={onClose}>Close</button>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
         <button className="primary-btn" onClick={handleReset}>Reset Stats</button>
@@ -773,7 +790,8 @@ export default function StatsModal({ exercise, title, open, onClose = () => {} }
       })}
 
       <Details exercise={exercise} key={exercise} />
-    </div>
+      </div>
+    </>
   )
 }
 

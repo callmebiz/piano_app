@@ -417,6 +417,12 @@ html,body{height:100%;}
 .muted{color:var(--muted);padding:8px}
 
 /* Stats modal styling */
+/* Dims the page and catches clicks outside the modal box to close it —
+   sits just below the modal's own z-index (1400) and above everything
+   else, covering the full viewport. */
+.stats-modal-backdrop{
+  position:fixed;inset:0;background:rgba(2,6,23,0.55);z-index:1399;cursor:pointer;
+}
 /* Centered, content-width panel rather than a fixed 80px-inset box that
    stretches edge-to-edge on a wide monitor — the content (labels, bars,
    numbers) has a natural width well under that, so stretching it just
@@ -430,9 +436,6 @@ html,body{height:100%;}
   border:1px solid rgba(255,255,255,0.04);box-shadow: 0 30px 80px rgba(2,6,23,0.7);
 }
 .light .stats-modal{ background-color: #ffffff; color: #071025; border-color: rgba(2,6,23,0.06); }
-
-/* Ensure modal visually blocks underlying content */
-.stats-modal::backdrop{ background: none }
 .stats-modal h3{color:var(--accent);margin:0 0 8px 0}
 .stats-modal .stats-table{width:100%;border-collapse:collapse;color:var(--muted);table-layout:fixed}
 .stats-modal .stats-table thead th{background:rgba(255,255,255,0.02);padding:10px;color:var(--muted);font-weight:700}
