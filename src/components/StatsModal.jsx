@@ -208,7 +208,7 @@ function Explore({ exercise }) {
   return (
     <div style={{ marginBottom: 24 }}>
       <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Explore</div>
-      <div style={{ fontSize: 11, color: 'var(--muted)', opacity: 0.8, marginBottom: 10 }}>Cross any two tracked dimensions — not just the breakdowns above.</div>
+      <div style={{ fontSize: 11, color: 'var(--muted)', opacity: 0.8, marginBottom: 10 }}>Cross any two tracked dimensions — not just the breakdowns below.</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
         <select value={fieldA} onChange={(e) => { setFieldA(e.target.value); setSelectedKey(null) }} style={selectStyle}>
           {fieldKeys.map((k) => <option key={k} value={k}>{fields[k]}</option>)}
@@ -296,14 +296,21 @@ export default function StatsModal({ exercise, title, open, onClose = () => {} }
   // instead of only whichever one happened to "win" a single-parent slot.
   const childrenOf = (key) => allRows.filter((r) => (Array.isArray(r.parent) ? r.parent.includes(key) : r.parent === key))
   const rowByKey = (key) => allRows.find((r) => r.key === key) || null
-  // Given a leaf that belongs under `excludeKey` (one of its parents), find
-  // its OTHER parent — e.g. a chord's root parent, given its type parent —
-  // without needing to know either dimension's key format. Used to label a
-  // chart bar with just the other dimension's own name (e.g. "Diminished
-  // 7th") instead of the leaf's full combined label (e.g. "C Diminished
+  // Given a leaf that belongs under `excludeKey` (one of its parents),
+  // label it by its OTHER parent(s) — e.g. a chord's type (and hand, if
+  // tracked), given its root parent — without needing to know any
+  // dimension's key format. A leaf can have more than 2 parents now (type,
+  // root, AND hand), so this joins whichever aren't excludeKey rather than
+  // assuming there's exactly one "other" — used to label a chart bar with
+  // just the other dimension(s)' own name(s) (e.g. "Diminished 7th · Left
+  // Hand") instead of the leaf's full combined label (e.g. "C Diminished
   // 7th"), which would needlessly repeat whatever the chart is already
   // filtered to.
-  const otherParentKeyOf = (leaf, excludeKey) => (Array.isArray(leaf.parent) ? leaf.parent.find((p) => p !== excludeKey) : null) || null
+  const otherParentLabelOf = (leaf, excludeKey) => {
+    if (!Array.isArray(leaf.parent)) return null
+    const others = leaf.parent.filter((p) => p !== excludeKey).map((p) => rowByKey(p)).filter(Boolean)
+    return others.length > 0 ? others.map((r) => r.label).join(' · ') : null
+  }
 
   // One section per dimension (Chord Type, Root, …), shown together rather
   // than behind a tab switcher — or, when there's no dimension split at
@@ -381,8 +388,8 @@ export default function StatsModal({ exercise, title, open, onClose = () => {} }
     // every one is just noise, so relabel with only the other dimension's
     // own name ("Diminished 7th").
     const childBars = children.map((c) => {
-      const other = rowByKey(otherParentKeyOf(c, row.key))
-      return { ...c, label: other ? other.label : c.label }
+      const otherLabel = otherParentLabelOf(c, row.key)
+      return { ...c, label: otherLabel || c.label }
     })
     const selectedChild = children.find((c) => c.key === selectedKey)
     return (
@@ -481,6 +488,8 @@ export default function StatsModal({ exercise, title, open, onClose = () => {} }
         </div>
       </div>
 
+      <Explore exercise={exercise} key={exercise} />
+
       {/* Breakdown — every dimension (Chord Type, Root, …) shown as its own
           section at once, instead of switching between them one at a time.
           Clicking a row (e.g. root "B") opens a bar chart of its own
@@ -515,8 +524,6 @@ export default function StatsModal({ exercise, title, open, onClose = () => {} }
           </div>
         )
       })}
-
-      <Explore exercise={exercise} key={exercise} />
     </div>
   )
 }

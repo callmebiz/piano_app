@@ -490,18 +490,32 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
   // list of allowed templates with root == C (0) for display when filters change
   const allowedForC = useMemo(() => (allowedTemplates || []).filter(t => t.root === 0), [allowedTemplates])
 
+  // Which hand a chord was played with — inferred from its lowest currently
+  // held note, not asked for or configured: below C4 (MIDI 60) reads as
+  // left hand, C4 or above reads as right hand. A reasonable default for
+  // most chord voicings; doesn't try to account for wide-stretch or
+  // deliberately-crossed-hands playing.
+  const lowestPressedMidi = () => {
+    const arr = pressedNotes ? (Array.isArray(pressedNotes) ? pressedNotes : Array.from(pressedNotes)) : []
+    return arr.length > 0 ? Math.min(...arr) : null
+  }
+
   // Field keys ("type"/"root") match what this app has always used for its
   // bucket keys (`type:${t}`, `root:${r}`, `chord:${t}@${r}`) — recordFact
   // builds the exact same buckets from these, so existing lifetime totals
   // keep accumulating on the same keys instead of starting over under new
   // ones. recordFact also tracks the previous prompt itself now, so no
-  // more lastChordKeyRef here.
+  // more lastChordKeyRef here. `hand` is sparse — omitted entirely when
+  // there's no reading (e.g. nothing pressed at record time), rather than
+  // recorded as a guess.
   const recordRound = (tmpl, correct, timeMs) => {
     if (!tmpl) return
     if (!trackStats) return
     const t = tmpl.type
     const r = tmpl.root
     const fm = formatMatch({ root: r, rootName: ROOTS[r], type: t, chordSize: (chordFormulas[t] || []).length }, [])
+    const lowest = lowestPressedMidi()
+    const hand = lowest == null ? null : (lowest < 60 ? 'left' : 'right')
     recordFact({
       exercise: 'play',
       correct,
@@ -510,7 +524,8 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
       promptLabel: fm.displayName,
       fields: {
         type: { value: t, label: fm.longName, dimension: 'Chord Type' },
-        root: { value: r, label: ROOTS[r], dimension: 'Root' }
+        root: { value: r, label: ROOTS[r], dimension: 'Root' },
+        ...(hand ? { hand: { value: hand, label: hand === 'left' ? 'Left Hand' : 'Right Hand', dimension: 'Hand' } } : {})
       }
     })
   }
