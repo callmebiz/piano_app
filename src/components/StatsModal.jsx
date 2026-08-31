@@ -31,6 +31,10 @@ function sortRows(rows, sortKey, sortDir) {
 
 const accuracyColor = (pct) => (pct >= 85 ? 'var(--accent)' : pct >= 60 ? '#ffd24a' : '#ff8a80')
 const fmtMs = (ms) => (ms == null ? '—' : ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms)}ms`)
+// Field keys (type, root, hand, interval, …) are lowercase since they're
+// also used as-is for sorting/filtering logic — this is purely a display
+// wrapper for column headers, not a rename of the key itself.
+const capitalize = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)
 // Speed has no universal "good" threshold the way accuracy does (85%+ is
 // always good; 2s is fast for one chord and slow for another) — so color
 // it relative to the fastest/slowest actually observed in the current
@@ -521,7 +525,7 @@ function SessionTable({ session, fieldKeysSeen, onDelete }) {
               <th style={thStyle}>{sortableTh('result', 'Result')}</th>
               <th style={thStyle}>{sortableTh('timeMs', 'Speed')}</th>
               <th style={thStyle}>{sortableTh('attemptNumber', '#')}</th>
-              {fieldKeysSeen.map((k) => <th key={k} style={thStyle}>{sortableTh(k, k)}</th>)}
+              {fieldKeysSeen.map((k) => <th key={k} style={thStyle}>{sortableTh(k, capitalize(k))}</th>)}
               <th style={thStyle} />
             </tr>
             {/* Filter row — a plain "All"-or-one-value dropdown per column,

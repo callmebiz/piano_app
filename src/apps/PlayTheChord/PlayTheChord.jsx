@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react'
 import { getTemplates, ROOTS, pcsToNotes, chordFormulas } from '../../lib/chords'
-import { formatMatch, recognize } from '../../lib/chords'
+import { formatMatch, recognize, intervalName } from '../../lib/chords'
 import useHoldToSkip from '../../hooks/useHoldToSkip'
 import { recordFact, getIdleThresholdMs, newSessionId } from '../../lib/practiceStats'
 import StatsModal from '../../components/StatsModal'
@@ -58,12 +58,12 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
 
   const [selectedCats, setSelectedCats] = useState(loadCategories)
   const [selectedRoots, setSelectedRoots] = useState(loadRoots)
-  const loadAllowInversions = () => {
-    try { const raw = localStorage.getItem('play:allowInversions'); if (raw) return JSON.parse(raw) } catch(e){}
+  const loadSpecifyInversions = () => {
+    try { const raw = localStorage.getItem('play:specifyInversions'); if (raw) return JSON.parse(raw) } catch(e){}
     return false
   }
-  const [allowInversions, setAllowInversions] = useState(loadAllowInversions)
-  useEffect(() => { try { localStorage.setItem('play:allowInversions', JSON.stringify(allowInversions)) } catch(e){} }, [allowInversions])
+  const [specifyInversions, setSpecifyInversions] = useState(loadSpecifyInversions)
+  useEffect(() => { try { localStorage.setItem('play:specifyInversions', JSON.stringify(specifyInversions)) } catch(e){} }, [specifyInversions])
   const loadShowNotes = () => {
     try { const raw = localStorage.getItem('play:showNotes'); if (raw) return JSON.parse(raw) } catch(e){}
     return true
@@ -267,6 +267,15 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
   const sessionIdRef = useRef(null)
   if (!sessionIdRef.current) sessionIdRef.current = newSessionId()
 
+  // Opening Stats is its own kind of pause from active practice — same
+  // spirit as an idle gap, so it ends the current session too. Whatever's
+  // played next (after closing the modal) starts a fresh one, rather than
+  // getting folded into whatever was accumulating right before you
+  // stepped away to check your numbers.
+  useEffect(() => {
+    if (showStats) sessionIdRef.current = newSessionId()
+  }, [showStats])
+
   // Start per-chord timing whenever a new chord is shown, so the very
   // first chord after opening the app (or after any gap) gets timed from
   // the moment it actually appeared, same as every chord after it.
@@ -310,7 +319,7 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
   useEffect(() => { hadWrongRef.current = hadWrongPress }, [hadWrongPress])
 
   // compute and push target MIDI notes to the global keyboard for highlighting
-  // This supports ordered/inversion-aware targets when `allowInversions` is enabled.
+  // This supports ordered/inversion-aware targets when `specifyInversions` is enabled.
   const computeTargetMidisForTemplate = (tmpl, allowInv) => {
     if (!tmpl || !tmpl.type) return { mids: new Set(), inv: 0, orderedPcs: [] }
     const LOWEST = 21, HIGHEST = 108
@@ -424,7 +433,7 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
   }
 
   useEffect(() => {
-    // compute and cache the target mids/pcs when current or allowInversions changes
+    // compute and cache the target mids/pcs when current or specifyInversions changes
   }, [])
 
   // Measure chord element and position the degree table to hug the chord's right edge
@@ -471,13 +480,13 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
       try { if (ro) ro.disconnect() } catch (e) {}
       window.removeEventListener('resize', measure)
     }
-  }, [current, currentOrderedPcs, allowInversions])
+  }, [current, currentOrderedPcs, specifyInversions])
 
   const [currentInversion, setCurrentInversion] = useState(null)
 
   useEffect(() => {
     try {
-      const res = computeTargetMidisForTemplate(current, allowInversions)
+      const res = computeTargetMidisForTemplate(current, specifyInversions)
       const mids = res && res.mids ? res.mids : new Set()
       const inv = res && typeof res.inv === 'number' ? res.inv : 0
       const pcs = new Set(current && current.pcs ? Array.from(current.pcs) : [])
@@ -486,9 +495,9 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
       setCurrentTargetPcs(pcs)
       setCurrentOrderedPcs(ordered)
       // only expose inversion when inversions are allowed; otherwise null
-      setCurrentInversion(allowInversions ? inv : null)
+      setCurrentInversion(specifyInversions ? inv : null)
     } catch (e) {}
-  }, [current, allowInversions])
+  }, [current, specifyInversions])
 
   // push the (possibly hidden) targets to the host whenever showNotes or current targets change
   useEffect(() => {
@@ -528,7 +537,40 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
     return arr.length > 0 ? Math.min(...arr) : null
   }
 
+  // Whether the currently-held bass note matches the SPECIFIC inversion
+  // that was actually requested. The completion check elsewhere only ever
+  // looked at pitch classes — right notes in any octave/voicing counted as
+  // solved — so turning on Specify Inversions changed which inversion gets
+  // *shown*, but never actually checked whether that's the one you played.
+  // When Specify Inversions is off, any voicing of the right pitch classes
+  // is correct (unchanged, existing behavior) — this only applies when a
+  // specific inversion was actually picked.
+  const isCorrectInversion = () => {
+    if (!specifyInversions || currentInversion == null || !current) return true
+    const lowest = lowestPressedMidi()
+    if (lowest == null) return true // nothing held — not this check's concern
+    const formula = chordFormulas[current.type] || []
+    const expectedOffset = formula[currentInversion]
+    if (expectedOffset == null) return true // defensive — shouldn't happen
+    const expectedBassPc = ((current.root + expectedOffset) % 12 + 12) % 12
+    const actualBassPc = ((lowest % 12) + 12) % 12
+    return actualBassPc === expectedBassPc
+  }
+
   const inversionLabel = (inv) => (inv === 0 ? 'Root Position' : inv === 1 ? '1st Inversion' : inv === 2 ? '2nd Inversion' : `${inv}rd Inversion`)
+
+  // intervalName() gives scale-degree labels like '1', '♭3', '#5', '7' —
+  // this appends the ordinal suffix (1st, ♭3rd, #5th, 7th) so the bass
+  // interval reads the same way Inversion does, while keeping the
+  // accidental prefix (a bare "3rd" would be ambiguous between major and
+  // minor 3rd, which is exactly the distinction that matters here).
+  const ordinalizeInterval = (label) => {
+    const match = label.match(/(\d+)$/)
+    if (!match) return label
+    const n = Number(match[1])
+    const suffix = n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th'
+    return `${label}${suffix}`
+  }
 
   // Field keys ("type"/"root") match what this app has always used for its
   // bucket keys (`type:${t}`, `root:${r}`, `chord:${t}@${r}`) — recordFact
@@ -555,6 +597,17 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
     const fm = formatMatch({ root: r, rootName: ROOTS[r], type: t, chordSize: (chordFormulas[t] || []).length }, [])
     const lowest = lowestPressedMidi()
     const hand = lowest == null ? null : (lowest < getHandThresholdMidi() ? 'left' : 'right')
+    // Which interval (relative to the chord's own root) is actually in the
+    // bass — computed from the real lowest note played, not an assumed
+    // voicing, so it's meaningful whether or not Specify Inversions is on
+    // (root position should always read '1' here; a genuine inversion
+    // shows the interval that's really down there, e.g. '3' or '5').
+    let bassIntervalLabel = null
+    if (lowest != null) {
+      const bassPc = ((lowest % 12) + 12) % 12
+      const semitonesFromRoot = ((bassPc - r) + 12) % 12
+      bassIntervalLabel = ordinalizeInterval(intervalName(semitonesFromRoot))
+    }
 
     const wasIdleGap = correct && typeof timeMs === 'number' && timeMs > getIdleThresholdMs('play')
     if (wasIdleGap) sessionIdRef.current = newSessionId()
@@ -563,12 +616,22 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
     // Name whatever was actually held during the first wrong shape this
     // round, using the same recognizer Chord Recognition uses — so an
     // incorrect attempt records not just that it was wrong, but what it
-    // actually was.
+    // actually was. formatMatch only folds the bass note into its own
+    // displayName for 9th+ chords — for triads/7ths (everything a wrong
+    // INVERSION miss involves) it computes bassName/inversion separately
+    // without including them in displayName, so a wrong-inversion miss on
+    // the otherwise-right chord would just print the same name as a
+    // correct attempt. Append the slash-bass ourselves whenever
+    // formatMatch says the bass isn't the root, so e.g. a C target missed
+    // as first inversion reads "C/E", not indistinguishably "C".
     let playedLabel = null
     if (!correct && wrongNotesRef.current && wrongNotesRef.current.length > 0) {
       try {
         const matches = recognize(wrongNotesRef.current)
-        if (matches && matches.length > 0) playedLabel = formatMatch(matches[0], wrongNotesRef.current).displayName
+        if (matches && matches.length > 0) {
+          const fmt = formatMatch(matches[0], wrongNotesRef.current)
+          playedLabel = (fmt.inversion && fmt.inversion !== 'root position' && fmt.bassName) ? `${fmt.displayName}/${fmt.bassName}` : fmt.displayName
+        }
       } catch (e) {}
     }
 
@@ -584,7 +647,8 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
         type: { value: t, label: fm.longName, dimension: 'Chord Type' },
         root: { value: r, label: ROOTS[r], dimension: 'Root' },
         ...(hand ? { hand: { value: hand, label: hand === 'left' ? 'Left Hand' : 'Right Hand', dimension: 'Hand' } } : {}),
-        ...(allowInversions && currentInversion != null ? { inversion: { value: currentInversion, label: inversionLabel(currentInversion), dimension: 'Inversion' } } : {})
+        ...(specifyInversions && currentInversion != null ? { inversion: { value: currentInversion, label: inversionLabel(currentInversion), dimension: 'Inversion' } } : {}),
+        ...(bassIntervalLabel != null ? { interval: { value: bassIntervalLabel, label: bassIntervalLabel, dimension: 'Interval' } } : {})
       }
     })
   }
@@ -640,7 +704,18 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
         const pool = (allowedTemplates && allowedTemplates.length > 0) ? allowedTemplates : []
         setStatus('solved')
         setScore(s => s + 1)
-        recordRound(current, !hadWrongRef.current, elapsedRound)
+        // Right pitch classes still always completes the round and advances
+        // (unchanged) — but with Specify Inversions on, landing on the
+        // wrong inversion makes it an incorrect attempt for tracking
+        // purposes, same as any other wrong note would. Snapshot what was
+        // actually held so it gets named (e.g. "C/E") in the Details table,
+        // same as a wrong-pitch-class miss already does — only if nothing
+        // else already claimed that snapshot for this round.
+        const correctInversion = isCorrectInversion()
+        if (!correctInversion && !wrongNotesRef.current) {
+          wrongNotesRef.current = pressedNotes ? (Array.isArray(pressedNotes) ? pressedNotes.slice() : Array.from(pressedNotes)) : []
+        }
+        recordRound(current, !hadWrongRef.current && correctInversion, elapsedRound)
         if (pool.length > 0) setPendingNext(pickDifferent(pool, current)); else setPendingNext(null)
       }
 
@@ -793,7 +868,7 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
             <div className="filter-block">
               <div className="filter-title">Options</div>
               <div style={{display:'flex',gap:8,marginTop:6}}>
-                <button className={`play-cat-btn ${allowInversions ? 'active' : ''}`} onClick={() => setAllowInversions(v => !v)}>Allow Inversions</button>
+                <button className={`play-cat-btn ${specifyInversions ? 'active' : ''}`} onClick={() => setSpecifyInversions(v => !v)}>Specify Inversions</button>
                 <button className={`play-cat-btn ${showNotes ? 'active' : ''}`} onClick={() => setShowNotes(v => !v)}>Show Notes</button>
                 <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:6}}>
                   <label style={{fontSize:12,color:'var(--muted)'}}>Hold</label>
@@ -847,7 +922,7 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
                     const fm = formatMatch(fakeMatch, [])
                     return (
                       <div style={{marginTop:12,textAlign:'center',fontSize:15,color:'var(--muted)'}}>
-                        {allowInversions && currentInversion !== null ? (
+                        {specifyInversions && currentInversion !== null ? (
                           <div style={{marginBottom:6}}>Inversion: {currentInversion}{currentInversion === 0 ? ' (root position)' : ''}</div>
                         ) : null}
                         <div><strong>{fm.longName}</strong></div>
