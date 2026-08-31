@@ -343,8 +343,11 @@ export function resetLifetimeStats(exercise) {
 // hand-construct dimension buckets and a parent-linked leaf bucket the way
 // Play The Chord and Scales used to. It also tracks fromKey internally
 // (lastPromptKeyByExercise) so callers no longer need their own ref for
-// "what was the previous prompt".
-export function recordFact({ exercise, correct, timeMs, fields = {}, promptKey, promptLabel }) {
+// "what was the previous prompt". `sessionId` (optional) is opaque —
+// generate one with newSessionId() and pass the same value across calls
+// that belong to one continuous practice stretch; see getIdleThresholdMs
+// above for detecting when a fresh one is warranted.
+export function recordFact({ exercise, correct, timeMs, fields = {}, promptKey, promptLabel, sessionId }) {
   if (!exercise) return
 
   const fieldEntries = Object.entries(fields).filter(([, v]) => v && v.value != null)
@@ -392,6 +395,7 @@ export function recordFact({ exercise, correct, timeMs, fields = {}, promptKey, 
     promptKey: promptKey || null,
     promptLabel: promptLabel || null,
     attemptNumber,
+    sessionId: sessionId || null,
     fields
   })
   store.facts[exercise] = pruneFacts(store.facts[exercise])
@@ -484,6 +488,36 @@ export function getOverallStats(exercise) {
     accuracy: events.length > 0 ? (correct.length / events.length) * 100 : 0,
     avgTimeMs: timed.length > 0 ? timed.reduce((sum, e) => sum + e.timeMs, 0) / timed.length : null
   }
+}
+
+// --- Auto-tracking support: idle detection + sessions ---
+// For an app that tracks continuously (no manual Start/Stop), the elapsed
+// time since a prompt was shown can include a genuine gap — stepped away,
+// came back — not real response time. There's no fixed "too long" that
+// works for everyone: a naturally slow player's normal thinking pauses
+// shouldn't get mistaken for a break, and a fast player's should still get
+// caught reasonably soon. So the threshold is relative to that exercise's
+// own overall average correct-response time, clamped to a sane range.
+const IDLE_MULTIPLIER = 8
+const IDLE_MIN_MS = 12000
+const IDLE_MAX_MS = 90000
+const IDLE_DEFAULT_MS = 15000 // used until there's any history to base a multiplier on
+
+export function getIdleThresholdMs(exercise) {
+  const avg = getOverallStats(exercise).avgTimeMs
+  if (avg == null) return IDLE_DEFAULT_MS
+  return Math.min(IDLE_MAX_MS, Math.max(IDLE_MIN_MS, avg * IDLE_MULTIPLIER))
+}
+
+// A session groups facts recorded without a real gap between them —
+// opaque to callers, just a fresh ID each time. Generate one on mount and
+// again whenever an idle gap (per getIdleThresholdMs) is detected, so
+// facts naturally fall into "continuous practice stretch" groups without
+// the caller needing to define session boundaries itself. Not yet
+// surfaced anywhere as its own stats view — recorded now so that can be
+// built later without needing to touch every recording call site again.
+export function newSessionId() {
+  return `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
 const dayKey = (ts) => {

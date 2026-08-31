@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState, useRef } from 'react'
 import { getTemplates, ROOTS, pcsToNotes, chordFormulas } from '../../lib/chords'
 import { formatMatch } from '../../lib/chords'
 import useHoldToSkip from '../../hooks/useHoldToSkip'
-import { recordFact } from '../../lib/practiceStats'
+import { recordFact, getIdleThresholdMs, newSessionId } from '../../lib/practiceStats'
 import StatsModal from '../../components/StatsModal'
 
 function randomInt(max) { return Math.floor(Math.random() * max) }
@@ -242,28 +242,32 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
   }, [allowedTemplates])
   const [status, setStatus] = useState('idle')
   const [score, setScore] = useState(0)
-  const [countdown, setCountdown] = useState(null)
-  const [roundActive, setRoundActive] = useState(false)
-  const [roundCanceled, setRoundCanceled] = useState(false)
   const [roundStartTs, setRoundStartTs] = useState(null)
   const [hadWrongPress, setHadWrongPress] = useState(false)
   const [showStats, setShowStats] = useState(false)
+  // Auto-tracking, always on by default — no Start/Stop needed. A viewer
+  // can still switch it off (e.g. just noodling) via the tracking toggle.
   const loadTrackStats = () => {
     try { const raw = localStorage.getItem('play:trackStats'); if (raw) return JSON.parse(raw) } catch(e){}
-    return false
+    return true
   }
   const [trackStats, setTrackStats] = useState(loadTrackStats)
   useEffect(() => { try { localStorage.setItem('play:trackStats', JSON.stringify(trackStats)) } catch(e){} }, [trackStats])
 
-  // Start per-chord timing for free-play when tracking is enabled and we're not in a timed round
+  // One continuous practice stretch's ID — regenerated whenever an idle gap
+  // is detected (see recordRound below), so facts naturally fall into
+  // "session" groups without any Start/Stop marking the boundary manually.
+  const sessionIdRef = useRef(null)
+  if (!sessionIdRef.current) sessionIdRef.current = newSessionId()
+
+  // Start per-chord timing whenever a new chord is shown, so the very
+  // first chord after opening the app (or after any gap) gets timed from
+  // the moment it actually appeared, same as every chord after it.
   useEffect(() => {
     try {
-      if (trackStats && current && !roundActive) {
-        // if there is no start timestamp, start one for this suggestion
-        setRoundStartTs(performance.now())
-      }
+      if (trackStats && current) setRoundStartTs(performance.now())
     } catch (e) {}
-  }, [current, trackStats, roundActive])
+  }, [current, trackStats])
 
   // When trackStats is turned OFF, clear any pending timers/state so
   // the last suggested chord (which may never have been played) is not
@@ -280,14 +284,11 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
       setPendingNext(null)
       // clear round timing state
       setRoundStartTs(null)
-      setRoundActive(false)
       setStatus('idle')
-      setRoundCanceled(false)
     }
   }, [trackStats])
 
   // no stats view toggle: consolidated stats modal
-  const countdownRef = useRef(null)
   const holdTimerRef = useRef(null)
   const holdStartRef = useRef(null)
   const [holdProgress, setHoldProgress] = useState(0)
@@ -510,6 +511,15 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
   // more lastChordKeyRef here. `hand`/`inversion` are sparse — omitted
   // entirely when there's no reading (nothing pressed yet, or Allow
   // Inversions is off), rather than recorded as a guess.
+  //
+  // Auto-tracking means `timeMs` (elapsed since this chord was shown) can
+  // include a real gap — stepped away, came back — not genuine response
+  // time. A clean correct solve (no wrong presses first, so the player was
+  // actually away rather than actively fumbling) whose elapsed time blows
+  // past this exercise's own idle threshold gets its accuracy recorded as
+  // usual but its timing dropped (untimed), and starts a fresh session —
+  // exactly the "away, then came back and played it" case, whether that's
+  // the very first chord after opening the app or any chord mid-session.
   const recordRound = (tmpl, correct, timeMs) => {
     if (!tmpl) return
     if (!trackStats) return
@@ -518,12 +528,18 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
     const fm = formatMatch({ root: r, rootName: ROOTS[r], type: t, chordSize: (chordFormulas[t] || []).length }, [])
     const lowest = lowestPressedMidi()
     const hand = lowest == null ? null : (lowest < 60 ? 'left' : 'right')
+
+    const wasIdleGap = correct && typeof timeMs === 'number' && timeMs > getIdleThresholdMs('play')
+    if (wasIdleGap) sessionIdRef.current = newSessionId()
+    const recordedTimeMs = wasIdleGap ? null : timeMs
+
     recordFact({
       exercise: 'play',
       correct,
-      timeMs,
+      timeMs: recordedTimeMs,
       promptKey: `chord:${t}@${r}`,
       promptLabel: fm.displayName,
+      sessionId: sessionIdRef.current,
       fields: {
         type: { value: t, label: fm.longName, dimension: 'Chord Type' },
         root: { value: r, label: ROOTS[r], dimension: 'Root' },
@@ -560,40 +576,21 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
     let noExtras = true
     for (const p of pressedPCs) if (!targetPCs.has(p)) { noExtras = false; break }
 
-    // Mark if any wrong pitch-class is currently pressed — regardless of
-    // roundActive. A "round" (the countdown+hold-timer flow from Start) is
-    // only ever active for a single chord; every chord after that runs
-    // through the free-play path below, which has no other way to notice
-    // a wrong note at all. Gating this on roundActive meant free-play
-    // (the app's normal, default way of playing) never recorded a miss —
-    // every chord came out "correct" regardless of what was actually
-    // played. noExtras already computed the same check above; reuse it.
+    // Mark if any wrong pitch-class is currently pressed. noExtras already
+    // computed the same check above; reuse it.
     if (!noExtras) setHadWrongPress(true)
 
     // If currently all present and no extras, start or continue hold timer
     if (allPresent && noExtras) {
-      // commit solved behavior depending on roundActive — shared by both the
-      // instant (holdSeconds === 0) and timed-hold completion paths
+      // Single unified path now that tracking is always-on auto-tracking —
+      // there's no separate "timed round" vs. "free-play" distinction to
+      // branch on anymore, just one continuous stream of prompts.
       const commitSolved = (elapsedRound) => {
-        if (roundActive) {
-          setRoundActive(false)
-          setStatus('solved')
-          setScore(s => s + 1)
-          if (!roundCanceled) recordRound(current, !hadWrongRef.current, elapsedRound)
-          const pool = (allowedTemplates && allowedTemplates.length > 0) ? allowedTemplates : []
-          if (pool.length > 0) setPendingNext(pickDifferent(pool, current)); else setPendingNext(null)
-        } else {
-          // free-play: also record successes so user's plays appear in stats
-          const pool = (allowedTemplates && allowedTemplates.length > 0) ? allowedTemplates : []
-          setStatus('solved')
-          // record free-play results as well (recordRound will no-op if trackStats is false)
-          recordRound(current, !hadWrongRef.current, elapsedRound)
-          if (pool.length > 0) {
-            setPendingNext(pickDifferent(pool, current))
-          } else {
-            setPendingNext(null)
-          }
-        }
+        const pool = (allowedTemplates && allowedTemplates.length > 0) ? allowedTemplates : []
+        setStatus('solved')
+        setScore(s => s + 1)
+        recordRound(current, !hadWrongRef.current, elapsedRound)
+        if (pool.length > 0) setPendingNext(pickDifferent(pool, current)); else setPendingNext(null)
       }
 
       if (holdSeconds <= 0) {
@@ -621,7 +618,6 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
               if (holdTimerRef.current) { clearInterval(holdTimerRef.current); holdTimerRef.current = null }
               holdStartRef.current = null
               setHoldProgress(1)
-              // commit solved behavior depending on roundActive
               const rawElapsed = roundStartTs ? (performance.now() - roundStartTs) : 0
               // subtract hold time (the required holdSeconds) from the recorded elapsed
               const elapsedRound = Math.max(0, rawElapsed - (holdSeconds * 1000))
@@ -642,7 +638,7 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
       if (holdTimerRef.current) { clearInterval(holdTimerRef.current); holdTimerRef.current = null }
       holdStartRef.current = null
     }
-  }, [pressedPCs, targetPCs, roundActive, roundStartTs, roundCanceled, hadWrongPress, allowedTemplates, holdSeconds])
+  }, [pressedPCs, targetPCs, roundStartTs, hadWrongPress, allowedTemplates, holdSeconds])
 
   // When solved and all keys released, advance to the pending next chord
   useEffect(() => {
@@ -651,56 +647,10 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
       setPendingNext(null)
       setStatus('idle')
       setHadWrongPress(false)
-      setRoundCanceled(false)
-      // new suggestion — start per-chord timer if tracking is enabled and not in a timed round
+      // new suggestion — start per-chord timer if tracking is enabled
       if (trackStats) setRoundStartTs(performance.now())
     }
   }, [pressedPCs, status, pendingNext])
-
-  // Start/Stop controls
-  const start = () => {
-    if (!allowedTemplates || allowedTemplates.length === 0) return
-    // countdown 3..1 then show chord and begin timing
-    let c = 3
-    setCountdown(c)
-    countdownRef.current = setInterval(() => {
-      c -= 1
-      if (c <= 0) {
-        clearInterval(countdownRef.current)
-        setCountdown(null)
-        // pick and show chord (avoid repeating current)
-        const next = pickDifferent(allowedTemplates, current)
-        setCurrent(next)
-        setRoundActive(true)
-        setRoundCanceled(false)
-        setHadWrongPress(false)
-        setRoundStartTs(performance.now())
-        // enable stat tracking when a timed round actually starts (after the countdown)
-        try { setTrackStats(true) } catch (e) {}
-        setStatus('running')
-      } else {
-        setCountdown(c)
-      }
-    }, 1000)
-  }
-
-  const stop = () => {
-    // cancel current active round; do not record stats for it
-    if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; setCountdown(null) }
-    // cancel any in-progress hold so it can't complete after Stop
-    if (holdTimerRef.current) { clearInterval(holdTimerRef.current); holdTimerRef.current = null }
-    holdStartRef.current = null
-    setHoldProgress(0)
-    if (roundActive) {
-      setRoundActive(false)
-      setRoundCanceled(true)
-      setStatus('stopped')
-    }
-    // Turning Stop should also disable stat tracking
-    try { setTrackStats(false) } catch (e) {}
-    // clear per-chord timer
-    setRoundStartTs(null)
-  }
 
   // Skip helper: pick a different allowed template and reset round state
   const skip = () => {
@@ -712,8 +662,6 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
       holdStartRef.current = null
       setHoldProgress(0)
       setCurrent(next)
-      setRoundActive(false)
-      setRoundCanceled(false)
       setHadWrongPress(false)
       setPendingNext(null)
       setStatus('idle')
@@ -899,13 +847,11 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
           </div>
         </div>
 
-        {/* Bottom: Controls (full-width, below the center card) */}
+        {/* Bottom: Controls (full-width, below the center card) — tracking
+            is automatic, no Start/Stop needed; the toggle below is the only
+            way to pause it (e.g. just noodling around). */}
         <div style={{display:'flex',justifyContent:'center'}}>
-          <div style={{width:'100%',maxWidth:1100,display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:8}}>
-            <div style={{display:'flex',gap:8}}>
-              <button className="primary-btn" onClick={start} disabled={!allowedTemplates || allowedTemplates.length === 0}>Start</button>
-              <button className="primary-btn" onClick={stop}>Stop</button>
-            </div>
+          <div style={{width:'100%',maxWidth:1100,display:'flex',justifyContent:'flex-end',alignItems:'center',marginTop:8}}>
             <div style={{display:'flex',gap:8,alignItems:'center'}}>
               <button className="primary-btn" onClick={() => setShowStats(true)}>View Stats</button>
               <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:6}} />
@@ -919,17 +865,19 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
                 <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${skipHoldProgress * 100}%`, background: 'rgba(0,0,0,0.28)', transition: skipHoldProgress === 0 ? 'width 150ms ease-out' : 'none', pointerEvents: 'none' }} />
                 <span style={{ position: 'relative' }}>Skip (S)</span>
               </button>
-              <div style={{marginLeft:12}}>{countdown != null ? <span style={{fontSize:18,fontWeight:800}}>Starting in {countdown}…</span> : null}</div>
               <div style={{marginLeft:12,fontSize:13,color:'var(--muted)'}}>
                 <strong>Score:</strong> {score}
               </div>
-              <div style={{marginLeft:12,padding:'6px 8px',borderRadius:8,fontWeight:700,display:'flex',alignItems:'center',gap:8,
+              <button
+                onClick={() => setTrackStats(v => !v)}
+                title={trackStats ? 'Tracking every chord automatically — click to pause' : 'Tracking is paused — click to resume'}
+                style={{marginLeft:12,padding:'6px 8px',borderRadius:8,fontWeight:700,display:'flex',alignItems:'center',gap:8,cursor:'pointer',
                 background: trackStats ? 'var(--accent)' : 'transparent',
                 color: trackStats ? '#071025' : 'var(--muted)',
                 border: trackStats ? 'none' : '1px solid rgba(255,255,255,0.04)'
               }}>
                 <div style={{fontWeight:900}}>{trackStats ? 'Stat tracking: ON' : 'Stat tracking: OFF'}</div>
-              </div>
+              </button>
             </div>
           </div>
         </div>
