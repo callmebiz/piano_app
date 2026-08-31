@@ -346,8 +346,10 @@ export function resetLifetimeStats(exercise) {
 // "what was the previous prompt". `sessionId` (optional) is opaque —
 // generate one with newSessionId() and pass the same value across calls
 // that belong to one continuous practice stretch; see getIdleThresholdMs
-// above for detecting when a fresh one is warranted.
-export function recordFact({ exercise, correct, timeMs, fields = {}, promptKey, promptLabel, sessionId }) {
+// above for detecting when a fresh one is warranted. `playedLabel`
+// (optional) names whatever was actually played when correct is false —
+// only stored when correct is false, regardless of what's passed.
+export function recordFact({ exercise, correct, timeMs, fields = {}, promptKey, promptLabel, playedLabel, sessionId }) {
   if (!exercise) return
 
   const fieldEntries = Object.entries(fields).filter(([, v]) => v && v.value != null)
@@ -394,6 +396,11 @@ export function recordFact({ exercise, correct, timeMs, fields = {}, promptKey, 
     timeMs: typeof timeMs === 'number' ? timeMs : null,
     promptKey: promptKey || null,
     promptLabel: promptLabel || null,
+    // What was actually played, when it was wrong — the caller's own best
+    // guess at naming whatever chord shape was actually held (e.g. via a
+    // chord recognizer), not derived here. Null when correct, or when the
+    // caller has no reading (nothing recognizable was ever held).
+    playedLabel: correct ? null : (playedLabel || null),
     attemptNumber,
     sessionId: sessionId || null,
     fields
@@ -404,6 +411,75 @@ export function recordFact({ exercise, correct, timeMs, fields = {}, promptKey, 
 
 export function getFacts(exercise) {
   return (store.facts[exercise] || []).slice()
+}
+
+// Deletes one fact and reverses everything it contributed — not just the
+// raw row. Returns true if a matching fact was found and removed.
+//   - Lifetime buckets it touched (every dimension field, plus its own
+//     promptKey leaf) get decremented; a bucket that reaches 0 attempts is
+//     removed entirely rather than left behind as an empty "0/0" row.
+//   - Its matching event in the rolling trend/streak log is removed too
+//     (matched by ts/correct/timeMs — events don't carry a fact id since
+//     they never needed one before).
+//   - The ONE transition pair it contributed to as the target (toKey) side
+//     is decremented — reconstructed from whichever fact immediately
+//     precedes it in the fact table (facts are always appended in order,
+//     so that's just the previous array entry), since a fact doesn't store
+//     its own fromKey. Best-effort: silently skipped if that preceding
+//     fact isn't there to look up (already pruned, or this was the very
+//     first fact ever) — nothing more can be reconstructed at that point.
+//   - Every later fact on the same prompt gets its attemptNumber shifted
+//     down by one, so the sequence stays a contiguous 1..N instead of
+//     leaving a hole where the deleted attempt used to be.
+export function deleteFact(exercise, factId) {
+  const facts = store.facts[exercise]
+  if (!facts) return false
+  const idx = facts.findIndex((f) => f.id === factId)
+  if (idx === -1) return false
+  const removed = facts[idx]
+  const prev = idx > 0 ? facts[idx - 1] : null
+  facts.splice(idx, 1)
+
+  const lifetime = store.lifetime[exercise]
+  if (lifetime) {
+    const fieldEntries = Object.entries(removed.fields || {}).filter(([, v]) => v && v.value != null)
+    const bucketKeys = fieldEntries.map(([k, v]) => `${k}:${v.value}`)
+    if (removed.promptKey) bucketKeys.push(removed.promptKey)
+    for (const key of bucketKeys) {
+      const b = lifetime[key]
+      if (!b) continue
+      b.attempts -= 1
+      if (removed.correct) b.correct -= 1
+      if (removed.correct && typeof removed.timeMs === 'number') b.totalTimeMs -= removed.timeMs
+      if (b.attempts <= 0) delete lifetime[key]
+    }
+  }
+
+  const events = store.events[exercise]
+  if (events) {
+    const i = events.findIndex((e) => e.ts === removed.ts && e.correct === removed.correct && e.timeMs === removed.timeMs)
+    if (i !== -1) events.splice(i, 1)
+  }
+
+  if (removed.promptKey && prev && prev.promptKey && store.transitions[exercise]) {
+    const pairKey = `${prev.promptKey}→${removed.promptKey}`
+    const t = store.transitions[exercise][pairKey]
+    if (t) {
+      t.attempts -= 1
+      if (removed.correct) t.correct -= 1
+      if (removed.correct && typeof removed.timeMs === 'number') t.totalTimeMs -= removed.timeMs
+      if (t.attempts <= 0) delete store.transitions[exercise][pairKey]
+    }
+  }
+
+  if (removed.promptKey && removed.attemptNumber != null) {
+    for (const f of facts) {
+      if (f.promptKey === removed.promptKey && f.attemptNumber > removed.attemptNumber) f.attemptNumber -= 1
+    }
+  }
+
+  saveStore(store)
+  return true
 }
 
 // -> [{ attemptNumber, correct, timeMs, ts }] for one specific prompt,

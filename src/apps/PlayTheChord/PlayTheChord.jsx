@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react'
 import { getTemplates, ROOTS, pcsToNotes, chordFormulas } from '../../lib/chords'
-import { formatMatch } from '../../lib/chords'
+import { formatMatch, recognize } from '../../lib/chords'
 import useHoldToSkip from '../../hooks/useHoldToSkip'
 import { recordFact, getIdleThresholdMs, newSessionId } from '../../lib/practiceStats'
 import StatsModal from '../../components/StatsModal'
@@ -300,6 +300,12 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
   const holdStartRef = useRef(null)
   const [holdProgress, setHoldProgress] = useState(0)
   const hadWrongRef = useRef(false)
+  // Snapshot of the FIRST wrong note set (raw MIDI) held this round — so
+  // when the round eventually gets recorded as incorrect, there's
+  // something to name what was actually played, not just that it was
+  // wrong. Reset whenever a new round starts (skip, or advancing to the
+  // next chord).
+  const wrongNotesRef = useRef(null)
 
   useEffect(() => { hadWrongRef.current = hadWrongPress }, [hadWrongPress])
 
@@ -499,11 +505,23 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
   const allowedForC = useMemo(() => (allowedTemplates || []).filter(t => t.root === 0), [allowedTemplates])
 
   // Which hand a chord was played with — inferred from its lowest currently
-  // held note, not asked for or configured: below A3 (MIDI 57) reads as
-  // left hand, A3 or above reads as right hand. A reasonable default for
-  // most chord voicings; doesn't try to account for wide-stretch or
-  // deliberately-crossed-hands playing.
-  const RIGHT_HAND_FLOOR_MIDI = 57 // A3
+  // held note, not asked for or configured: below the threshold (default
+  // A3, MIDI 57 — adjustable in Settings) reads as left hand, at or above
+  // it reads as right hand. A reasonable default for most chord voicings;
+  // doesn't try to account for wide-stretch or deliberately-crossed-hands
+  // playing. Read fresh from localStorage each time rather than kept in
+  // React state — it only matters at the moment a round is recorded, so
+  // there's nothing to re-render for, and this always reflects whatever
+  // was last set in Settings even if it changed while this app was open.
+  const DEFAULT_HAND_THRESHOLD_MIDI = 57 // A3
+  const getHandThresholdMidi = () => {
+    try {
+      const raw = localStorage.getItem('play:handThresholdMidi')
+      const n = raw != null ? Number(raw) : NaN
+      if (Number.isFinite(n)) return n
+    } catch (e) {}
+    return DEFAULT_HAND_THRESHOLD_MIDI
+  }
 
   const lowestPressedMidi = () => {
     const arr = pressedNotes ? (Array.isArray(pressedNotes) ? pressedNotes : Array.from(pressedNotes)) : []
@@ -536,11 +554,23 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
     const r = tmpl.root
     const fm = formatMatch({ root: r, rootName: ROOTS[r], type: t, chordSize: (chordFormulas[t] || []).length }, [])
     const lowest = lowestPressedMidi()
-    const hand = lowest == null ? null : (lowest < RIGHT_HAND_FLOOR_MIDI ? 'left' : 'right')
+    const hand = lowest == null ? null : (lowest < getHandThresholdMidi() ? 'left' : 'right')
 
     const wasIdleGap = correct && typeof timeMs === 'number' && timeMs > getIdleThresholdMs('play')
     if (wasIdleGap) sessionIdRef.current = newSessionId()
     const recordedTimeMs = wasIdleGap ? null : timeMs
+
+    // Name whatever was actually held during the first wrong shape this
+    // round, using the same recognizer Chord Recognition uses — so an
+    // incorrect attempt records not just that it was wrong, but what it
+    // actually was.
+    let playedLabel = null
+    if (!correct && wrongNotesRef.current && wrongNotesRef.current.length > 0) {
+      try {
+        const matches = recognize(wrongNotesRef.current)
+        if (matches && matches.length > 0) playedLabel = formatMatch(matches[0], wrongNotesRef.current).displayName
+      } catch (e) {}
+    }
 
     recordFact({
       exercise: 'play',
@@ -548,6 +578,7 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
       timeMs: recordedTimeMs,
       promptKey: `chord:${t}@${r}`,
       promptLabel: fm.displayName,
+      playedLabel,
       sessionId: sessionIdRef.current,
       fields: {
         type: { value: t, label: fm.longName, dimension: 'Chord Type' },
@@ -586,8 +617,19 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
     for (const p of pressedPCs) if (!targetPCs.has(p)) { noExtras = false; break }
 
     // Mark if any wrong pitch-class is currently pressed. noExtras already
-    // computed the same check above; reuse it.
-    if (!noExtras) setHadWrongPress(true)
+    // computed the same check above; reuse it. Only capture the FIRST
+    // wrong shape held this round — later fumbles don't overwrite it, so
+    // this reflects the first mistake rather than whichever happened to be
+    // held right before self-correcting into the right answer. Snapshot
+    // the raw MIDI notes (not just pitch classes) — recognize() needs the
+    // actual bass note, not merely the lowest pitch class, to name the
+    // chord in the right root position.
+    if (!noExtras) {
+      setHadWrongPress(true)
+      if (!wrongNotesRef.current) {
+        wrongNotesRef.current = pressedNotes ? (Array.isArray(pressedNotes) ? pressedNotes.slice() : Array.from(pressedNotes)) : []
+      }
+    }
 
     // If currently all present and no extras, start or continue hold timer
     if (allPresent && noExtras) {
@@ -656,6 +698,7 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
       setPendingNext(null)
       setStatus('idle')
       setHadWrongPress(false)
+      wrongNotesRef.current = null
       // new suggestion — start per-chord timer if tracking is enabled
       if (trackStats) setRoundStartTs(performance.now())
     }
@@ -672,6 +715,7 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
       setHoldProgress(0)
       setCurrent(next)
       setHadWrongPress(false)
+      wrongNotesRef.current = null
       setPendingNext(null)
       setStatus('idle')
       setRoundStartTs(null)

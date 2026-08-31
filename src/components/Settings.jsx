@@ -2,6 +2,16 @@ import React, { useEffect, useState } from 'react'
 import { getAudioParams, setAudioParams, AUDIO_DEFAULTS } from '../audio/engine'
 import { getStaffSettings, setStaffSettings, STAFF_DEFAULTS } from '../lib/staffSettings'
 
+// MIDI -> "A3"-style label (standard convention: MIDI 60 = C4), used for
+// the Play The Chord hand-threshold slider so it reads as a note, not a
+// raw MIDI number.
+const NOTE_NAMES_SHARP = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+function midiToNoteLabel(midi) {
+  const pc = ((midi % 12) + 12) % 12
+  const octave = Math.floor(midi / 12) - 1
+  return `${NOTE_NAMES_SHARP[pc]}${octave}`
+}
+
 export default function Settings({ open = false, onClose = () => {}, app = '', shrinkOn = false }) {
   const DEFAULT_WHITE = 40
   const DEFAULT_BLACK = 25
@@ -10,6 +20,7 @@ export default function Settings({ open = false, onClose = () => {}, app = '', s
   const DEFAULT_VIS_COLOR_BLACK = '#6ee7b7'
   const DEFAULT_VIS_BORDER_COLOR = 'rgba(0,0,0,0.12)'
   const DEFAULT_VIS_BORDER_WIDTH = 1
+  const DEFAULT_HAND_THRESHOLD = 57 // A3 — see PlayTheChord.jsx
 
   const readStored = (key, fallback) => {
     try { const v = localStorage.getItem(key); if (v) return Number(v) } catch(e) {}
@@ -32,6 +43,14 @@ export default function Settings({ open = false, onClose = () => {}, app = '', s
   const [visualColorsLocked, setVisualColorsLocked] = useState(() => {
     try { return localStorage.getItem('visualizer:colorsLocked') === '1' } catch(e) { return true }
   })
+
+  const [handThreshold, setHandThreshold] = useState(() => readStored('play:handThresholdMidi', DEFAULT_HAND_THRESHOLD))
+  const onHandThresholdChange = (v) => {
+    const n = Number(v)
+    if (!Number.isFinite(n)) return
+    setHandThreshold(n)
+    try { localStorage.setItem('play:handThresholdMidi', String(n)) } catch(e) {}
+  }
 
   const [audio, setAudio] = useState(() => getAudioParams())
   const updateAudio = (partial) => setAudio(setAudioParams(partial))
@@ -227,6 +246,22 @@ export default function Settings({ open = false, onClose = () => {}, app = '', s
                   </button>
                 ))}
               </div>
+            </>
+          )}
+
+          {app === 'play' && (
+            <>
+              <div style={{gridColumn:'1 / -1', marginTop:10, paddingTop:10, borderTop:'1px solid rgba(255,255,255,0.06)', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                <div style={{fontWeight:700, color:'var(--accent)'}}>Play The Chord</div>
+                <button onClick={() => onHandThresholdChange(DEFAULT_HAND_THRESHOLD)} title="Reset hand threshold to default" style={{padding:'6px 10px',borderRadius:6,border:'1px solid rgba(255,255,255,0.06)',background:'transparent',color:'var(--muted)'}}>Reset</button>
+              </div>
+
+              <div style={{fontWeight:600}}>Hand threshold</div>
+              <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                <input type="range" min={36} max={84} value={handThreshold} onChange={e => onHandThresholdChange(e.target.value)} onDoubleClick={() => onHandThresholdChange(DEFAULT_HAND_THRESHOLD)} style={{flex:1, minWidth:0}} />
+                <div style={{width:44,textAlign:'right',fontSize:13,fontWeight:700}}>{midiToNoteLabel(handThreshold)}</div>
+              </div>
+              <div style={{gridColumn:'1 / -1', fontSize:12, opacity:0.7}}>A played chord's lowest note at or above this counts as right hand for stats; below it, left hand.</div>
             </>
           )}
 

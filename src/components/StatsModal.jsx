@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react'
-import { getLifetimeStats, resetLifetimeStats, getDailyTrend, getStreak, getTransitions, getOverallStats, getAvailableFields, crossTab, getFacts } from '../lib/practiceStats'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { getLifetimeStats, resetLifetimeStats, getDailyTrend, getStreak, getTransitions, getOverallStats, getAvailableFields, crossTab, getFacts, deleteFact } from '../lib/practiceStats'
 
 const TREND_DAYS = 14
 const COLLAPSED_ROWS = 8
@@ -346,22 +346,305 @@ function Explore({ exercise }) {
 const thStyle = { padding: '4px 8px', textAlign: 'left', color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap', borderBottom: '1px solid rgba(255,255,255,0.06)' }
 const tdStyle = { padding: '4px 8px', whiteSpace: 'nowrap' }
 const DETAILS_SESSIONS_PAGE = 3
+const DETAILS_ROWS_PAGE = 25
 
-// The raw underlying record, session by session — collapsed behind a
-// toggle since most viewers just want the summarized breakdowns above,
-// but there whenever someone wants to check that a specific attempt
-// actually got captured (and, for auto-tracking, whether it was excluded
-// from speed as a detected idle gap — that shows up here as a ✓ result
-// with a "—" Speed, rather than being invisible). A "session" is just a
-// maximal run of consecutive facts (once sorted newest-first) sharing the
-// same sessionId — real session boundaries only ever happen at a detected
-// idle gap, so contiguous-in-time already means contiguous-in-session.
-function Details({ exercise }) {
-  const [open, setOpen] = useState(false)
+const fmtDetailsTime = (ts) => new Date(ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+const fmtDetailsTimeShort = (ts) => new Date(ts).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+
+// Sortable value for one fact + column — used by SessionTable below. Null/
+// missing values (untimed speed, no attempt number, a field this fact
+// doesn't carry) always sort to the end regardless of direction, same
+// convention as the breakdown lists' own avgTimeMs sort.
+function detailsSortValue(f, sortKey) {
+  switch (sortKey) {
+    case 'ts': return f.ts
+    case 'prompt': return f.promptLabel || f.promptKey || ''
+    case 'result': return f.correct ? (f.promptLabel || '') : (f.playedLabel || 'Wrong')
+    case 'timeMs': return f.timeMs
+    case 'attemptNumber': return f.attemptNumber
+    default: return f.fields && f.fields[sortKey] ? f.fields[sortKey].label : null
+  }
+}
+
+function sortDetailsFacts(facts, sortKey, sortDir) {
+  const dir = sortDir === 'asc' ? 1 : -1
+  return [...facts].sort((a, b) => {
+    const av = detailsSortValue(a, sortKey)
+    const bv = detailsSortValue(b, sortKey)
+    if (av == null && bv == null) return 0
+    if (av == null) return 1
+    if (bv == null) return -1
+    if (typeof av === 'string') return av.localeCompare(bv) * dir
+    return (av - bv) * dir
+  })
+}
+
+// Display string for one fact + column — what's actually shown in the
+// cell, and (for every column except Speed, which gets its own min/max
+// range instead) exactly the value its dropdown filter matches against.
+function detailsDisplayValue(f, key) {
+  switch (key) {
+    case 'ts': return fmtDetailsTime(f.ts)
+    case 'prompt': return f.promptLabel || f.promptKey || '—'
+    case 'result': return f.correct ? (f.promptLabel || '—') : (f.playedLabel || 'Wrong')
+    case 'attemptNumber': return f.attemptNumber ?? '—'
+    default: return f.fields && f.fields[key] ? f.fields[key].label : '—'
+  }
+}
+
+const numberInputStyle = { width: 46, fontSize: 9, padding: '2px 3px', borderRadius: 4, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: 'inherit', textAlign: 'center' }
+
+// A true dual-handle range — one track, two draggable ends, both also
+// directly editable as a number (raw milliseconds). Built from scratch
+// (a track + two handle divs, positioned and dragged in JS) rather than
+// two overlapping native <input type=range> elements — that technique
+// relies on each browser's own thumb/track pixel geometry lining up with
+// a separately-drawn fill bar, which doesn't hold up consistently; owning
+// every pixel here means the handles and the track they sit on are
+// always exactly aligned. `bounds`/`value` are [min, max] pairs.
+function DualRangeFilter({ bounds, value, onChange }) {
+  const [lo, hi] = bounds
+  const [vLo, vHi] = value
+  const trackRef = useRef(null)
+  const pct = (v) => (lo === hi ? 0 : ((v - lo) / (hi - lo)) * 100)
+
+  const setLo = (n) => { if (Number.isFinite(n)) onChange([Math.min(Math.max(lo, n), vHi), vHi]) }
+  const setHi = (n) => { if (Number.isFinite(n)) onChange([vLo, Math.max(Math.min(hi, n), vLo)]) }
+  const valueAtClientX = (clientX) => {
+    const el = trackRef.current
+    if (!el) return lo
+    const rect = el.getBoundingClientRect()
+    const ratio = rect.width > 0 ? Math.min(1, Math.max(0, (clientX - rect.left) / rect.width)) : 0
+    return lo + ratio * (hi - lo)
+  }
+
+  const startDrag = (which) => (e) => {
+    e.preventDefault()
+    const move = (ev) => {
+      const v = valueAtClientX(ev.clientX)
+      if (which === 'lo') setLo(v); else setHi(v)
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
+
+  // Clicking the track (not a handle) jumps whichever handle is closer.
+  const onTrackClick = (e) => {
+    const v = valueAtClientX(e.clientX)
+    if (Math.abs(v - vLo) <= Math.abs(v - vHi)) setLo(v); else setHi(v)
+  }
+
+  const handleStyle = (v) => ({
+    position: 'absolute', top: '50%', left: `${pct(v)}%`, transform: 'translate(-50%, -50%)',
+    width: 13, height: 13, borderRadius: '50%', background: 'var(--accent)',
+    boxShadow: '0 0 0 2px rgba(2,6,23,0.6)', cursor: 'pointer', touchAction: 'none'
+  })
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+      <input type="number" value={Math.round(vLo)} min={lo} max={vHi} title="Minimum, in milliseconds" onChange={(e) => setLo(Number(e.target.value))} style={numberInputStyle} />
+      <div ref={trackRef} onClick={onTrackClick} style={{ position: 'relative', flex: 1, minWidth: 46, height: 16, cursor: 'pointer' }}>
+        <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: 4, transform: 'translateY(-50%)', borderRadius: 2, background: 'rgba(255,255,255,0.1)' }} />
+        <div style={{ position: 'absolute', top: '50%', left: `${pct(vLo)}%`, width: `${Math.max(0, pct(vHi) - pct(vLo))}%`, height: 4, transform: 'translateY(-50%)', borderRadius: 2, background: 'var(--accent)' }} />
+        <div onPointerDown={startDrag('lo')} style={handleStyle(vLo)} />
+        <div onPointerDown={startDrag('hi')} style={handleStyle(vHi)} />
+      </div>
+      <input type="number" value={Math.round(vHi)} min={vLo} max={hi} title="Maximum, in milliseconds" onChange={(e) => setHi(Number(e.target.value))} style={numberInputStyle} />
+    </div>
+  )
+}
+
+// One session's own table (its date range/attempts/accuracy header is
+// rendered by Details, which also owns whether this is showing at all) —
+// sorting AND filtering are both scoped to just this session (its own
+// local state), not shared across the whole Details view, so touching one
+// session's controls never reorders or hides rows in another.
+function SessionTable({ session, fieldKeysSeen, onDelete }) {
+  const [sortKey, setSortKey] = useState('ts')
+  const [sortDir, setSortDir] = useState('desc')
+  // { [columnKey]: selectedDisplayValue } — every column except Speed,
+  // which uses the numeric range below instead of an exact-match dropdown
+  // (its actual values are continuous milliseconds, not a handful of
+  // repeatable options).
+  const [filters, setFilters] = useState({})
+  const [visibleRows, setVisibleRows] = useState(DETAILS_ROWS_PAGE)
+
+  const timedValues = session.facts.map((f) => f.timeMs).filter((v) => v != null)
+  const speedBounds = timedValues.length > 0 ? [Math.min(...timedValues), Math.max(...timedValues)] : null
+  const [speedMin, setSpeedMin] = useState(() => (speedBounds ? speedBounds[0] : 0))
+  const [speedMax, setSpeedMax] = useState(() => (speedBounds ? speedBounds[1] : 0))
+  const speedFilterActive = speedBounds && (speedMin > speedBounds[0] || speedMax < speedBounds[1])
+
+  const toggleSort = (key) => {
+    if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    else { setSortKey(key); setSortDir(key === 'ts' || key === 'timeMs' ? 'desc' : 'asc') }
+  }
+  const indicator = (key) => (sortKey === key ? <span className="sort-indicator">{sortDir === 'asc' ? '▲' : '▼'}</span> : null)
+  const sortableTh = (key, label) => (
+    <button className={`sortable-header ${sortKey === key ? 'active' : ''}`} onClick={() => toggleSort(key)} style={headerBtnStyle(null)}>{label} {indicator(key)}</button>
+  )
+
+  const dropdownColumns = ['ts', 'prompt', 'result', 'attemptNumber', ...fieldKeysSeen]
+  const distinctValuesFor = (key) => Array.from(new Set(session.facts.map((f) => detailsDisplayValue(f, key)))).sort((a, b) => String(a).localeCompare(String(b)))
+
+  const filtered = session.facts.filter((f) => {
+    if (speedFilterActive && (f.timeMs == null || f.timeMs < speedMin || f.timeMs > speedMax)) return false
+    return dropdownColumns.every((col) => !filters[col] || detailsDisplayValue(f, col) === filters[col])
+  })
+  const sorted = sortDetailsFacts(filtered, sortKey, sortDir)
+  const anyFilterActive = speedFilterActive || Object.values(filters).some(Boolean)
+  const clearFilters = () => {
+    setFilters({})
+    if (speedBounds) { setSpeedMin(speedBounds[0]); setSpeedMax(speedBounds[1]) }
+  }
+  const visible = sorted.slice(0, visibleRows)
+  const remainingRows = sorted.length - visible.length
+
+  return (
+    <div>
+      {anyFilterActive && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4, flexWrap: 'wrap' }}>
+          <div style={{ fontSize: 11, color: 'var(--muted)' }}>showing {sorted.length} of {session.attempts}</div>
+          <button className="play-cat-btn" style={{ padding: '2px 8px', fontSize: 10 }} onClick={clearFilters}>Clear filters</button>
+        </div>
+      )}
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ borderCollapse: 'collapse', fontSize: 11, width: '100%' }}>
+          <thead>
+            <tr>
+              <th style={thStyle}>{sortableTh('ts', 'Time')}</th>
+              <th style={thStyle}>{sortableTh('prompt', 'Prompt')}</th>
+              <th style={thStyle}>{sortableTh('result', 'Result')}</th>
+              <th style={thStyle}>{sortableTh('timeMs', 'Speed')}</th>
+              <th style={thStyle}>{sortableTh('attemptNumber', '#')}</th>
+              {fieldKeysSeen.map((k) => <th key={k} style={thStyle}>{sortableTh(k, k)}</th>)}
+              <th style={thStyle} />
+            </tr>
+            {/* Filter row — a plain "All"-or-one-value dropdown per column,
+                except Speed which gets a min/max range (its real values are
+                continuous milliseconds, not a short list of repeats). */}
+            <tr>
+              {['ts', 'prompt', 'result'].map((col) => (
+                <th key={col} style={{ ...thStyle, borderBottom: 'none', paddingTop: 2, paddingBottom: 4 }}>
+                  <select value={filters[col] || ''} onChange={(e) => setFilters((f) => ({ ...f, [col]: e.target.value || undefined }))} style={{ ...selectStyle, fontSize: 10, padding: '2px 4px', width: '100%' }}>
+                    <option value="">All</option>
+                    {distinctValuesFor(col).map((v) => <option key={v} value={v}>{v}</option>)}
+                  </select>
+                </th>
+              ))}
+              <th style={{ ...thStyle, borderBottom: 'none', paddingTop: 2, paddingBottom: 4, minWidth: 140 }}>
+                {speedBounds ? (
+                  <DualRangeFilter
+                    bounds={speedBounds}
+                    value={[speedMin, speedMax]}
+                    onChange={([lo, hi]) => { setSpeedMin(lo); setSpeedMax(hi) }}
+                  />
+                ) : <span style={{ fontSize: 9, opacity: 0.5 }}>—</span>}
+              </th>
+              <th style={{ ...thStyle, borderBottom: 'none', paddingTop: 2, paddingBottom: 4 }}>
+                <select value={filters.attemptNumber || ''} onChange={(e) => setFilters((f) => ({ ...f, attemptNumber: e.target.value || undefined }))} style={{ ...selectStyle, fontSize: 10, padding: '2px 4px', width: '100%' }}>
+                  <option value="">All</option>
+                  {distinctValuesFor('attemptNumber').map((v) => <option key={v} value={v}>{v}</option>)}
+                </select>
+              </th>
+              {fieldKeysSeen.map((k) => (
+                <th key={k} style={{ ...thStyle, borderBottom: 'none', paddingTop: 2, paddingBottom: 4 }}>
+                  <select value={filters[k] || ''} onChange={(e) => setFilters((f) => ({ ...f, [k]: e.target.value || undefined }))} style={{ ...selectStyle, fontSize: 10, padding: '2px 4px', width: '100%' }}>
+                    <option value="">All</option>
+                    {distinctValuesFor(k).map((v) => <option key={v} value={v}>{v}</option>)}
+                  </select>
+                </th>
+              ))}
+              <th style={{ ...thStyle, borderBottom: 'none' }} />
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.length === 0 ? (
+              <tr><td colSpan={6 + fieldKeysSeen.length} style={{ ...tdStyle, textAlign: 'center', color: 'var(--muted)', opacity: 0.7 }}>No attempts match these filters</td></tr>
+            ) : visible.map((f) => (
+              <tr key={f.id}>
+                <td style={tdStyle}>{fmtDetailsTime(f.ts)}</td>
+                <td style={tdStyle}>{f.promptLabel || f.promptKey || '—'}</td>
+                <td style={{ ...tdStyle, color: f.correct ? 'var(--accent)' : '#ff8a80', fontWeight: 700 }}>
+                  {f.correct ? (f.promptLabel || '—') : (f.playedLabel || 'Wrong')}
+                </td>
+                <td style={tdStyle}>{fmtMs(f.timeMs)}</td>
+                <td style={tdStyle}>{f.attemptNumber ?? '—'}</td>
+                {fieldKeysSeen.map((k) => <td key={k} style={tdStyle}>{f.fields && f.fields[k] ? f.fields[k].label : '—'}</td>)}
+                <td style={tdStyle}>
+                  <button
+                    onClick={() => onDelete(f)}
+                    title="Delete this attempt from all tracking"
+                    style={{ background: 'transparent', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: 13, padding: '2px 6px', lineHeight: 1 }}
+                  >
+                    ✕
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {remainingRows > 0 && (
+        <button className="play-cat-btn" style={{ marginTop: 6, fontSize: 11 }} onClick={() => setVisibleRows((n) => n + DETAILS_ROWS_PAGE)}>
+          Load {Math.min(DETAILS_ROWS_PAGE, remainingRows)} more
+        </button>
+      )}
+    </div>
+  )
+}
+
+// The raw underlying record, session by session — shown by default (still
+// behind a toggle to hide it, for anyone who'd rather just see the
+// summarized breakdowns above), so it's there right away for checking that
+// a specific attempt actually got captured (and, for auto-tracking,
+// whether it was excluded
+// from speed as a detected idle gap — that shows up here as a correct
+// Result with a "—" Speed, rather than being invisible). Result shows the
+// same chord-name styling as Prompt: the target's own name in green when
+// correct, or whatever was actually played in red when not — not just a
+// ✓/✗. Each row can be deleted, reversing its contribution everywhere
+// (lifetime buckets, the trend/streak event log, the one transition it
+// counted toward, and renumbering later attempts on the same prompt) via
+// practiceStats' deleteFact — not just removed from this list. A
+// "session" is just a maximal run of consecutive facts (once sorted
+// newest-first) sharing the same sessionId — real session boundaries only
+// ever happen at a detected idle gap, so contiguous-in-time already means
+// contiguous-in-session.
+function Details({ exercise, onChange = () => {} }) {
+  const [open, setOpen] = useState(true)
   const [visibleSessions, setVisibleSessions] = useState(DETAILS_SESSIONS_PAGE)
+  // Which sessions have been explicitly clicked away from their default
+  // state — the most recent session (index 0) defaults open, every other
+  // one defaults collapsed, so this only needs to track deviations from
+  // that rather than every session's state individually.
+  const [toggledSessions, setToggledSessions] = useState(new Set())
 
   if (!open) {
     return <div style={{ marginBottom: 24 }}><button className="play-cat-btn" onClick={() => setOpen(true)}>Show Details</button></div>
+  }
+
+  const isSessionOpen = (key, idx) => {
+    const defaultOpen = idx === 0
+    return toggledSessions.has(key) ? !defaultOpen : defaultOpen
+  }
+  const toggleSession = (key) => {
+    setToggledSessions((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key); else next.add(key)
+      return next
+    })
+  }
+
+  const handleDelete = (f) => {
+    const label = f.correct ? f.promptLabel : (f.playedLabel || f.promptLabel || 'this attempt')
+    if (!window.confirm(`Delete this attempt (${label})? This removes it from every stat it counted toward — can't be undone.`)) return
+    deleteFact(exercise, f.id)
+    onChange()
   }
 
   const facts = getFacts(exercise).sort((a, b) => b.ts - a.ts)
@@ -383,9 +666,6 @@ function Details({ exercise }) {
   const shown = sessions.slice(0, visibleSessions)
   const remaining = sessions.length - shown.length
 
-  const fmtTime = (ts) => new Date(ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
-  const fmtTimeShort = (ts) => new Date(ts).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
-
   return (
     <div style={{ marginBottom: 24 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
@@ -399,39 +679,24 @@ function Details({ exercise }) {
         <div className="muted" style={{ padding: 8 }}>No data yet</div>
       ) : (
         <>
-          {shown.map((s) => (
-            <div key={s.sessionId || s.start} style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>
-                {fmtTime(s.start)}{s.end !== s.start ? ` – ${fmtTimeShort(s.end)}` : ''} · {s.attempts} attempt{s.attempts === 1 ? '' : 's'} · {Math.round(s.accuracy)}% accuracy
+          {shown.map((s, idx) => {
+            const key = s.sessionId || s.start
+            const isOpen = isSessionOpen(key, idx)
+            return (
+              <div key={key} style={{ marginBottom: 16 }}>
+                <div
+                  onClick={() => toggleSession(key)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: isOpen ? 4 : 0 }}
+                >
+                  <span style={{ display: 'inline-block', width: 12, opacity: 0.6, fontSize: 11 }}>{isOpen ? '▾' : '▸'}</span>
+                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+                    {fmtDetailsTime(s.start)}{s.end !== s.start ? ` – ${fmtDetailsTimeShort(s.end)}` : ''} · {s.attempts} attempt{s.attempts === 1 ? '' : 's'} · {Math.round(s.accuracy)}% accuracy
+                  </span>
+                </div>
+                {isOpen && <SessionTable session={s} fieldKeysSeen={fieldKeysSeen} onDelete={handleDelete} />}
               </div>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ borderCollapse: 'collapse', fontSize: 11, width: '100%' }}>
-                  <thead>
-                    <tr>
-                      <th style={thStyle}>Time</th>
-                      <th style={thStyle}>Prompt</th>
-                      <th style={thStyle}>Result</th>
-                      <th style={thStyle}>Speed</th>
-                      <th style={thStyle}>#</th>
-                      {fieldKeysSeen.map((k) => <th key={k} style={thStyle}>{k}</th>)}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {s.facts.map((f) => (
-                      <tr key={f.id}>
-                        <td style={tdStyle}>{fmtTime(f.ts)}</td>
-                        <td style={tdStyle}>{f.promptLabel || f.promptKey || '—'}</td>
-                        <td style={{ ...tdStyle, color: f.correct ? 'var(--accent)' : '#ff8a80' }}>{f.correct ? '✓' : '✗'}</td>
-                        <td style={tdStyle}>{fmtMs(f.timeMs)}</td>
-                        <td style={tdStyle}>{f.attemptNumber ?? '—'}</td>
-                        {fieldKeysSeen.map((k) => <td key={k} style={tdStyle}>{f.fields && f.fields[k] ? f.fields[k].label : '—'}</td>)}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ))}
+            )
+          })}
           {remaining > 0 && (
             <button className="play-cat-btn" onClick={() => setVisibleSessions((n) => n + DETAILS_SESSIONS_PAGE)}>
               Show {Math.min(DETAILS_SESSIONS_PAGE, remaining)} more session{Math.min(DETAILS_SESSIONS_PAGE, remaining) === 1 ? '' : 's'}
@@ -789,7 +1054,7 @@ export default function StatsModal({ exercise, title, open, onClose = () => {} }
         )
       })}
 
-      <Details exercise={exercise} key={exercise} />
+      <Details exercise={exercise} key={exercise} onChange={() => setRefreshSeq((n) => n + 1)} />
       </div>
     </>
   )
