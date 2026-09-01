@@ -22,21 +22,26 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
   // --- Settings: categories and allowed roots (persisted)
   // New filter groups requested by user (sorted):
   // Major, Minor, Diminished, Augmented, Suspended, Flat/Raised, 6th, 7th, add9, add11, add13, 9th, 11th, 13th
+  // `abbr` is used only for the per-attempt Enabled Chords profile
+  // (see describeChordTypesProfile below) — short enough that a whole
+  // enabled-set reads as one glance ("Maj Min Dim Aug Sus") instead of a
+  // long comma list; `label` (unabbreviated) stays what the filter
+  // buttons/breakdown display elsewhere.
   const CATEGORIES = {
-    major: { label: 'Major', types: ['fifth','major','M7','M9','M11','M13'] },
-    minor: { label: 'Minor', types: ['minor','m6','m7','m9','m11','m13'] },
-    diminished: { label: 'Diminished', types: ['dim','dim7'] },
-    augmented: { label: 'Augmented', types: ['aug'] },
-    suspended: { label: 'Suspended', types: ['sus2','sus4','7sus2','7sus4','9sus4'] },
-    flatRaised: { label: 'Flat/Raised', types: ['flat5','7b5','9b5','11b5','13b5','b9','mb9','m9b5','7#5','9#5','11#5','13#5','m7#5','m9#5'] },
-    sixth: { label: '6th', types: ['6','m6','7/6','9/6','m9/6'] },
-    seventh: { label: '7th', types: ['7','m7','dim7','M7','mM7','7b5','7#5','m7b5','m7#5','7sus2','7sus4','7/6'] },
-    add9: { label: 'add9', types: ['add9','madd9'] },
-    add11: { label: 'add11', types: ['add11','madd11'] },
-    add13: { label: 'add13', types: ['add13','madd13'] },
-    ninth: { label: '9th', types: ['9','m9','b9','mb9','9#5','9sus4','9b5','m9b5','m9#5','M9','9/6','m9/6'] },
-    eleventh: { label: '11th', types: ['11','m11','M11','11b5','11#5','11M7','11b9','11#9'] },
-    thirteenth: { label: '13th', types: ['13','M13','m13','13b5','13#5'] }
+    major: { label: 'Major', abbr: 'Maj', types: ['fifth','major','M7','M9','M11','M13'] },
+    minor: { label: 'Minor', abbr: 'Min', types: ['minor','m6','m7','m9','m11','m13'] },
+    diminished: { label: 'Diminished', abbr: 'Dim', types: ['dim','dim7'] },
+    augmented: { label: 'Augmented', abbr: 'Aug', types: ['aug'] },
+    suspended: { label: 'Suspended', abbr: 'Sus', types: ['sus2','sus4','7sus2','7sus4','9sus4'] },
+    flatRaised: { label: 'Flat/Raised', abbr: 'Alt', types: ['flat5','7b5','9b5','11b5','13b5','b9','mb9','m9b5','7#5','9#5','11#5','13#5','m7#5','m9#5'] },
+    sixth: { label: '6th', abbr: '6th', types: ['6','m6','7/6','9/6','m9/6'] },
+    seventh: { label: '7th', abbr: '7th', types: ['7','m7','dim7','M7','mM7','7b5','7#5','m7b5','m7#5','7sus2','7sus4','7/6'] },
+    add9: { label: 'add9', abbr: 'add9', types: ['add9','madd9'] },
+    add11: { label: 'add11', abbr: 'add11', types: ['add11','madd11'] },
+    add13: { label: 'add13', abbr: 'add13', types: ['add13','madd13'] },
+    ninth: { label: '9th', abbr: '9th', types: ['9','m9','b9','mb9','9#5','9sus4','9b5','m9b5','m9#5','M9','9/6','m9/6'] },
+    eleventh: { label: '11th', abbr: '11th', types: ['11','m11','M11','11b5','11#5','11M7','11b9','11#9'] },
+    thirteenth: { label: '13th', abbr: '13th', types: ['13','M13','m13','13b5','13#5'] }
   }
 
   const loadCategories = () => {
@@ -113,6 +118,26 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
   }, [selectedCats])
 
   const allowedRoots = useMemo(() => new Set(Array.from(selectedRoots)), [selectedRoots])
+
+  // Canonical, order-stable descriptions of the currently-active options —
+  // recorded on every attempt (see recordRound) so Stats can show how
+  // enabling/disabling a category, changing the root pool, or toggling
+  // Specify Inversions actually affected accuracy/speed (e.g. "the first
+  // day 7ths were enabled, accuracy dipped"), instead of that always being
+  // invisibly blended into one lifetime average. `value` is the stable
+  // grouping key (order-independent), `label` what's actually shown.
+  const NATURAL_ROOT_PCS = [0, 2, 4, 5, 7, 9, 11]
+  const describeChordTypesProfile = (cats) => {
+    const enabledKeys = Object.keys(CATEGORIES).filter((k) => cats[k])
+    return { value: enabledKeys.join(','), label: enabledKeys.map((k) => CATEGORIES[k].abbr).join(' ') || 'None' }
+  }
+  const describeRootsProfile = (rootsSet) => {
+    const pcs = Array.from(rootsSet).sort((a, b) => a - b)
+    const label = pcs.length === 12 ? 'All 12'
+      : (pcs.length === NATURAL_ROOT_PCS.length && pcs.every((p, i) => p === NATURAL_ROOT_PCS[i])) ? 'Naturals only'
+      : pcs.map((p) => ROOTS[p]).join(', ') || 'None'
+    return { value: pcs.join(','), label }
+  }
 
   // Build reverse mapping: type -> categories that include it
   // Explicit atomic tag mapping for each chord type. Each tag name corresponds
@@ -309,12 +334,24 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
   const holdStartRef = useRef(null)
   const [holdProgress, setHoldProgress] = useState(0)
   const hadWrongRef = useRef(false)
-  // Snapshot of the FIRST wrong note set (raw MIDI) held this round — so
-  // when the round eventually gets recorded as incorrect, there's
-  // something to name what was actually played, not just that it was
-  // wrong. Reset whenever a new round starts (skip, or advancing to the
-  // next chord).
-  const wrongNotesRef = useRef(null)
+  // Every DISTINCT wrong note shape (raw MIDI arrays) held this round, in
+  // the order first held — so when the round eventually gets recorded as
+  // incorrect, the full fumble shows up (e.g. target C#m played as C, then
+  // Cm, then finally correctly), not just whichever mistake happened to be
+  // captured first. Reset whenever a new round starts (skip, or advancing
+  // to the next chord).
+  const wrongShapesRef = useRef([])
+  // The most recent wrong shape seen WHILE currently in a "wrong" state
+  // (some held note isn't in the target) — kept overwritten with the
+  // latest such shape every tick, and only actually pushed onto
+  // wrongShapesRef once play returns to a valid state (see the `noExtras`
+  // branch below). This makes capture a deterministic function of the
+  // actual note-on/note-off sequence — no timer/threshold — building or
+  // fixing a chord note-by-note passes through several transient wrong
+  // pitch-class sets as individual notes land a few ms apart, and only the
+  // last one held right before recovering is what actually gets logged,
+  // exactly once per continuous wrong stretch.
+  const wrongEpisodeShapeRef = useRef(null)
 
   useEffect(() => { hadWrongRef.current = hadWrongPress }, [hadWrongPress])
 
@@ -559,6 +596,39 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
 
   const inversionLabel = (inv) => (inv === 0 ? 'Root Position' : inv === 1 ? '1st Inversion' : inv === 2 ? '2nd Inversion' : `${inv}rd Inversion`)
 
+  // Pitch-class-set identity for a raw MIDI shape — used to tell whether a
+  // newly-held wrong shape is actually a NEW mistake or just the same one
+  // still being held (the tracking effect re-runs on every keyboard
+  // change), so wrongShapesRef only grows when something genuinely
+  // different gets played, not once per re-render of the same held notes.
+  const shapePcsKey = (rawMidi) => Array.from(new Set(rawMidi.map((m) => ((m % 12) + 12) % 12))).sort((a, b) => a - b).join(',')
+
+  // Names whatever raw MIDI shape was actually held, using the same
+  // recognizer Chord Recognition uses. formatMatch already folds the bass
+  // note into its own displayName for 9th+ chords (and 2-note fifths) —
+  // only append it ourselves when it's NOT already there, so a wrong
+  // INVERSION miss on an otherwise-right triad/7th still reads "C/E" (not
+  // indistinguishably "C"), without doubling up into e.g. "F#11b5/E/E" for
+  // chords that already embed the bass note in their own display name.
+  const nameHeldShape = (rawMidi) => {
+    try {
+      const matches = recognize(rawMidi)
+      if (!matches || matches.length === 0) return null
+      const fmt = formatMatch(matches[0], rawMidi)
+      if (fmt.inversion && fmt.inversion !== 'root position' && fmt.bassName && !fmt.displayName.endsWith(`/${fmt.bassName}`)) {
+        return `${fmt.displayName}/${fmt.bassName}`
+      }
+      return fmt.displayName
+    } catch (e) { return null }
+  }
+
+  // Appends `snapshot` to wrongShapesRef only if it's a genuinely different
+  // shape than whatever was captured last — see shapePcsKey above.
+  const pushWrongShapeIfNew = (snapshot) => {
+    const last = wrongShapesRef.current[wrongShapesRef.current.length - 1]
+    if (!last || shapePcsKey(last) !== shapePcsKey(snapshot)) wrongShapesRef.current.push(snapshot)
+  }
+
   // intervalName() gives scale-degree labels like '1', '♭3', '#5', '7' —
   // this appends the ordinal suffix (1st, ♭3rd, #5th, 7th) so the bass
   // interval reads the same way Inversion does, while keeping the
@@ -589,7 +659,7 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
   // usual but its timing dropped (untimed), and starts a fresh session —
   // exactly the "away, then came back and played it" case, whether that's
   // the very first chord after opening the app or any chord mid-session.
-  const recordRound = (tmpl, correct, timeMs) => {
+  const recordRound = (tmpl, correct, timeMs, endedCorrect) => {
     if (!tmpl) return
     if (!trackStats) return
     const t = tmpl.type
@@ -613,27 +683,16 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
     if (wasIdleGap) sessionIdRef.current = newSessionId()
     const recordedTimeMs = wasIdleGap ? null : timeMs
 
-    // Name whatever was actually held during the first wrong shape this
-    // round, using the same recognizer Chord Recognition uses — so an
-    // incorrect attempt records not just that it was wrong, but what it
-    // actually was. formatMatch only folds the bass note into its own
-    // displayName for 9th+ chords — for triads/7ths (everything a wrong
-    // INVERSION miss involves) it computes bassName/inversion separately
-    // without including them in displayName, so a wrong-inversion miss on
-    // the otherwise-right chord would just print the same name as a
-    // correct attempt. Append the slash-bass ourselves whenever
-    // formatMatch says the bass isn't the root, so e.g. a C target missed
-    // as first inversion reads "C/E", not indistinguishably "C".
-    let playedLabel = null
-    if (!correct && wrongNotesRef.current && wrongNotesRef.current.length > 0) {
-      try {
-        const matches = recognize(wrongNotesRef.current)
-        if (matches && matches.length > 0) {
-          const fmt = formatMatch(matches[0], wrongNotesRef.current)
-          playedLabel = (fmt.inversion && fmt.inversion !== 'root position' && fmt.bassName) ? `${fmt.displayName}/${fmt.bassName}` : fmt.displayName
-        }
-      } catch (e) {}
-    }
+    // Name every DISTINCT wrong shape held this round, in order, using the
+    // same recognizer Chord Recognition uses — so an incorrect attempt
+    // records the whole fumble (e.g. target C#m played as C, then Cm,
+    // before finally landing correctly), not just the first mistake. See
+    // nameHeldShape for why it doesn't double up the bass note for chords
+    // that already embed one (e.g. 9ths+).
+    const wrongLabels = !correct ? wrongShapesRef.current.map(nameHeldShape).filter(Boolean) : []
+
+    const chordTypesProfile = describeChordTypesProfile(selectedCats)
+    const rootsProfile = describeRootsProfile(allowedRoots)
 
     recordFact({
       exercise: 'play',
@@ -641,14 +700,18 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
       timeMs: recordedTimeMs,
       promptKey: `chord:${t}@${r}`,
       promptLabel: fm.displayName,
-      playedLabel,
+      wrongLabels,
+      endedCorrect: !!endedCorrect,
       sessionId: sessionIdRef.current,
       fields: {
         type: { value: t, label: fm.longName, dimension: 'Chord Type' },
         root: { value: r, label: ROOTS[r], dimension: 'Root' },
-        ...(hand ? { hand: { value: hand, label: hand === 'left' ? 'Left Hand' : 'Right Hand', dimension: 'Hand' } } : {}),
+        ...(hand ? { hand: { value: hand, label: hand === 'left' ? 'LH' : 'RH', dimension: 'Hand' } } : {}),
         ...(specifyInversions && currentInversion != null ? { inversion: { value: currentInversion, label: inversionLabel(currentInversion), dimension: 'Inversion' } } : {}),
-        ...(bassIntervalLabel != null ? { interval: { value: bassIntervalLabel, label: bassIntervalLabel, dimension: 'Interval' } } : {})
+        ...(bassIntervalLabel != null ? { interval: { value: bassIntervalLabel, label: bassIntervalLabel, dimension: 'Interval' } } : {}),
+        chordTypesProfile: { value: chordTypesProfile.value, label: chordTypesProfile.label, dimension: 'Enabled Chords' },
+        allowedRootsProfile: { value: rootsProfile.value, label: rootsProfile.label, dimension: 'Allowed Roots' },
+        specifyInversionsProfile: { value: specifyInversions ? 'on' : 'off', label: specifyInversions ? 'On' : 'Off', dimension: 'Specify Inversions' }
       }
     })
   }
@@ -680,19 +743,28 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
     let noExtras = true
     for (const p of pressedPCs) if (!targetPCs.has(p)) { noExtras = false; break }
 
-    // Mark if any wrong pitch-class is currently pressed. noExtras already
-    // computed the same check above; reuse it. Only capture the FIRST
-    // wrong shape held this round — later fumbles don't overwrite it, so
-    // this reflects the first mistake rather than whichever happened to be
-    // held right before self-correcting into the right answer. Snapshot
-    // the raw MIDI notes (not just pitch classes) — recognize() needs the
-    // actual bass note, not merely the lowest pitch class, to name the
-    // chord in the right root position.
+    // Mark if any wrong pitch-class is currently pressed — this happens
+    // immediately (any extra note at all makes the round incorrect, even a
+    // fleeting one). noExtras already computed the same check above; reuse
+    // it.
+    //
+    // NAMING which wrong shape was played is keyed off the actual
+    // note-on/note-off sequence, not a timer: while in a wrong state, just
+    // keep overwriting wrongEpisodeShapeRef with whatever's currently held
+    // (so building or fixing a chord note-by-note — several transient
+    // wrong pitch-class sets as individual notes land a few ms apart —
+    // never itself logs anything) and only push it onto wrongShapesRef
+    // the moment play actually recovers to a valid state (right below) —
+    // so one wrong stretch becomes exactly one entry, however many notes
+    // it took to land or release. Snapshot the raw MIDI notes (not just
+    // pitch classes) — recognize() needs the actual bass note, not merely
+    // the lowest pitch class, to name the chord in the right root position.
     if (!noExtras) {
       setHadWrongPress(true)
-      if (!wrongNotesRef.current) {
-        wrongNotesRef.current = pressedNotes ? (Array.isArray(pressedNotes) ? pressedNotes.slice() : Array.from(pressedNotes)) : []
-      }
+      wrongEpisodeShapeRef.current = pressedNotes ? (Array.isArray(pressedNotes) ? pressedNotes.slice() : Array.from(pressedNotes)) : []
+    } else if (wrongEpisodeShapeRef.current) {
+      pushWrongShapeIfNew(wrongEpisodeShapeRef.current)
+      wrongEpisodeShapeRef.current = null
     }
 
     // If currently all present and no extras, start or continue hold timer
@@ -709,13 +781,14 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
         // wrong inversion makes it an incorrect attempt for tracking
         // purposes, same as any other wrong note would. Snapshot what was
         // actually held so it gets named (e.g. "C/E") in the Details table,
-        // same as a wrong-pitch-class miss already does — only if nothing
-        // else already claimed that snapshot for this round.
+        // same as a wrong-pitch-class miss already does (deduped the same
+        // way, in case it happens to match whatever was captured last).
         const correctInversion = isCorrectInversion()
-        if (!correctInversion && !wrongNotesRef.current) {
-          wrongNotesRef.current = pressedNotes ? (Array.isArray(pressedNotes) ? pressedNotes.slice() : Array.from(pressedNotes)) : []
+        if (!correctInversion) {
+          const snapshot = pressedNotes ? (Array.isArray(pressedNotes) ? pressedNotes.slice() : Array.from(pressedNotes)) : []
+          pushWrongShapeIfNew(snapshot)
         }
-        recordRound(current, !hadWrongRef.current && correctInversion, elapsedRound)
+        recordRound(current, !hadWrongRef.current && correctInversion, elapsedRound, correctInversion)
         if (pool.length > 0) setPendingNext(pickDifferent(pool, current)); else setPendingNext(null)
       }
 
@@ -773,7 +846,8 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
       setPendingNext(null)
       setStatus('idle')
       setHadWrongPress(false)
-      wrongNotesRef.current = null
+      wrongShapesRef.current = []
+      wrongEpisodeShapeRef.current = null
       // new suggestion — start per-chord timer if tracking is enabled
       if (trackStats) setRoundStartTs(performance.now())
     }
@@ -790,7 +864,8 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
       setHoldProgress(0)
       setCurrent(next)
       setHadWrongPress(false)
-      wrongNotesRef.current = null
+      wrongShapesRef.current = []
+      wrongEpisodeShapeRef.current = null
       setPendingNext(null)
       setStatus('idle')
       setRoundStartTs(null)

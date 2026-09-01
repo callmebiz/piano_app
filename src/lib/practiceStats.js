@@ -346,11 +346,28 @@ export function resetLifetimeStats(exercise) {
 // "what was the previous prompt". `sessionId` (optional) is opaque —
 // generate one with newSessionId() and pass the same value across calls
 // that belong to one continuous practice stretch; see getIdleThresholdMs
-// above for detecting when a fresh one is warranted. `playedLabel`
-// (optional) names whatever was actually played when correct is false —
-// only stored when correct is false, regardless of what's passed.
-export function recordFact({ exercise, correct, timeMs, fields = {}, promptKey, promptLabel, playedLabel, sessionId }) {
+// above for detecting when a fresh one is warranted.
+//
+// `wrongLabels` (optional): every DISTINCT wrong shape a caller recognized
+// during this one attempt, in order — e.g. a target C#m fumbled through C
+// then Cm before finally landing correctly. `endedCorrect` (optional):
+// whether the attempt's FINAL held shape was actually the right one (true
+// means "several wrong tries, then got it"; false means the attempt ended
+// ON a wrong shape — e.g. the wrong inversion — which is itself the last
+// entry of wrongLabels, nothing further to show). Together these let a UI
+// show the wrong tries in order and, only when true, the target as how it
+// was ultimately resolved. `playedLabel` — a flat legacy display string
+// for anything that just wants "what to show/sort/filter by" without
+// per-wrong-shape detail — is derived from wrongLabels/endedCorrect when
+// given, falling back to whatever the caller passes directly for callers
+// that don't track multiple shapes. Only stored (both) when correct is
+// false, regardless of what's passed.
+export function recordFact({ exercise, correct, timeMs, fields = {}, promptKey, promptLabel, playedLabel, wrongLabels, endedCorrect, sessionId }) {
   if (!exercise) return
+
+  const derivedPlayedLabel = (Array.isArray(wrongLabels) && wrongLabels.length > 0)
+    ? wrongLabels.join(', ') + (endedCorrect && promptLabel ? `, ${promptLabel}` : '')
+    : (playedLabel || null)
 
   const fieldEntries = Object.entries(fields).filter(([, v]) => v && v.value != null)
 
@@ -397,10 +414,12 @@ export function recordFact({ exercise, correct, timeMs, fields = {}, promptKey, 
     promptKey: promptKey || null,
     promptLabel: promptLabel || null,
     // What was actually played, when it was wrong — the caller's own best
-    // guess at naming whatever chord shape was actually held (e.g. via a
-    // chord recognizer), not derived here. Null when correct, or when the
-    // caller has no reading (nothing recognizable was ever held).
-    playedLabel: correct ? null : (playedLabel || null),
+    // guess at naming whatever chord shape(s) were actually held (e.g. via
+    // a chord recognizer), not derived here. Null when correct, or when
+    // the caller has no reading (nothing recognizable was ever held).
+    playedLabel: correct ? null : derivedPlayedLabel,
+    wrongLabels: (!correct && Array.isArray(wrongLabels) && wrongLabels.length > 0) ? wrongLabels : null,
+    endedCorrect: correct ? null : !!endedCorrect,
     attemptNumber,
     sessionId: sessionId || null,
     fields
