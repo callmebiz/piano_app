@@ -1,10 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { resetLifetimeStats, getDailyTrend, getStreak, getOverallStats, getAvailableFields, crossTab, getFacts, deleteFact } from '../lib/practiceStats'
+import { resetLifetimeStats, getStreak, getOverallStats, getAvailableFields, crossTab, getFacts, deleteFact } from '../lib/practiceStats'
 
-const TREND_DAYS = 14
 const COLLAPSED_ROWS = 8
-const TREND_LABEL_SPACE = 14 // headroom above the plot area for each bar's printed value
-const TREND_HEIGHT = 60 + TREND_LABEL_SPACE
 
 function sortRows(rows, sortKey, sortDir) {
   return [...rows].sort((a, b) => {
@@ -222,7 +219,7 @@ function Heatmap({ combos, fieldA, fieldB, labelA, labelB, metrics, selectedKey,
   const singleMetric = metrics[0]
 
   return (
-    <div style={{ overflowX: 'auto' }}>
+    <div style={{ overflowX: 'auto', display: 'flex', justifyContent: 'center' }}>
       <table style={{ borderCollapse: 'collapse', fontSize: 11 }}>
         <thead>
           <tr>
@@ -1108,9 +1105,10 @@ function Details({ exercise, onChange = () => {} }) {
 }
 
 // Shared stats dashboard for every exercise app (Identify's 5 exercises,
-// Ear Training's 4, Play The Chord, Scales): headline KPI cards, a daily
-// accuracy trend, and a breakdown list. Buckets sharing a `dimension` (e.g.
-// Play The Chord's "Root" vs "Chord Type") render as their own section, all
+// Ear Training's 4, Play The Chord, Scales): headline KPI cards, Explore
+// (cross any two dimensions), Progress (a filterable line chart over time),
+// and a live Breakdown list. Buckets sharing a `dimension` (e.g. Play The
+// Chord's "Root" vs "Chord Type") render as their own section, all
 // shown at once — not one dimension at a time behind a tab, so e.g. a
 // chord's type and root breakdowns are both visible together without
 // clicking anything. Clicking a row opens (or closes) it — a bucket can
@@ -1150,15 +1148,11 @@ export default function StatsModal({ exercise, title, open, onClose = () => {} }
   const [expandedSections, setExpandedSections] = useState({})
   // Bumped on Reset so the memoized reads below re-run against the cleared store.
   const [refreshSeq, setRefreshSeq] = useState(0)
-  // Trend chart's own Accuracy/Speed selection — separate from Explore's,
-  // since they're different charts a viewer may want set differently.
-  const [trendMetrics, setTrendMetrics] = useState(['accuracy'])
   // Progress's own filter selections, lifted up here so Breakdown can react
   // to them too — { [fieldKey]: selectedLabel }. Progress remains the only
   // thing that WRITES to this; Breakdown just reads it.
   const [progressFilters, setProgressFilters] = useState({})
 
-  const trend = useMemo(() => (open ? getDailyTrend(exercise, TREND_DAYS) : []), [open, exercise, refreshSeq])
   const streak = useMemo(() => (open ? getStreak(exercise) : null), [open, exercise, refreshSeq])
   const overall = useMemo(() => (open ? getOverallStats(exercise) : null), [open, exercise, refreshSeq])
 
@@ -1212,33 +1206,10 @@ export default function StatsModal({ exercise, title, open, onClose = () => {} }
   const toggleExpanded = (id) => setExpandedSections((s) => ({ ...s, [id]: !s[id] }))
 
   const handleReset = () => {
-    if (!window.confirm(`Reset all ${title} stats? This clears every recorded attempt, streak, and trend — it can't be undone.`)) return
+    if (!window.confirm(`Reset all ${title} stats? This clears every recorded attempt and streak — it can't be undone.`)) return
     resetLifetimeStats(exercise)
     setSelectedKey(null)
     setRefreshSeq((n) => n + 1)
-  }
-
-  const maxAttemptsInTrend = Math.max(1, ...trend.map((t) => t.attempts))
-  // Speed's relative fast/slow scale for the trend window — only days with
-  // any timed (correct) attempts count toward it.
-  const trendTimedMs = trend.map((t) => t.avgTimeMs).filter((ms) => ms != null)
-  const trendMinMs = trendTimedMs.length > 0 ? Math.min(...trendTimedMs) : 0
-  const trendMaxMs = trendTimedMs.length > 0 ? Math.max(...trendTimedMs) : 0
-  // One value-label line per day, precomputed so the JSX below doesn't
-  // have to inline a metric-dependent formula — only shown when exactly
-  // one metric is active (with both, the bars themselves carry the detail
-  // and a per-day label for each would be too cramped to read).
-  const trendLabel = (t) => {
-    if (trendMetrics.length !== 1 || t.attempts === 0) return null
-    if (trendMetrics[0] === 'speed') return t.avgTimeMs == null ? null : fmtMs(t.avgTimeMs)
-    return `${Math.round(t.accuracy)}%`
-  }
-  const trendLabelPct = (t) => {
-    if (trendMetrics[0] === 'speed') {
-      if (t.avgTimeMs == null) return 0
-      return trendMaxMs === trendMinMs ? 50 : 100 - ((t.avgTimeMs - trendMinMs) / (trendMaxMs - trendMinMs)) * 100
-    }
-    return t.accuracy || 0
   }
 
   // KPI cards reflect the current selection, if any — a live dashboard
@@ -1272,17 +1243,13 @@ export default function StatsModal({ exercise, title, open, onClose = () => {} }
         <div style={{ flex: 1, height: 8, background: 'rgba(255,255,255,0.06)', borderRadius: 4, overflow: 'hidden', minWidth: 40 }}>
           <div style={{ width: `${Math.max(3, barPct)}%`, height: '100%', background: barColor }} />
         </div>
-        {metric === 'speed' ? (
-          <>
-            <div style={{ width: 82, fontSize: 12, color: 'var(--muted)', textAlign: 'right', flexShrink: 0 }}>{fmtMs(row.avgTimeMs)} ({row.correct}/{row.attempts})</div>
-            <div style={{ width: 60, fontSize: 12, color: 'var(--muted)', textAlign: 'right', flexShrink: 0 }}>{Math.round(row.accuracy)}%</div>
-          </>
-        ) : (
-          <>
-            <div style={{ width: 82, fontSize: 12, color: 'var(--muted)', textAlign: 'right', flexShrink: 0 }}>{Math.round(row.accuracy)}% ({row.correct}/{row.attempts})</div>
-            <div style={{ width: 60, fontSize: 12, color: 'var(--muted)', textAlign: 'right', flexShrink: 0 }}>{fmtMs(row.avgTimeMs)}</div>
-          </>
-        )}
+        {/* Fixed positions matching the header row above (Accuracy always
+            in the 82px slot, Speed always in the 60px slot) — only the bar
+            and sort order change with the metric toggle, not which column
+            holds which stat, or the column would stop matching its own
+            header label. */}
+        <div style={{ width: 82, fontSize: 12, color: 'var(--muted)', textAlign: 'right', flexShrink: 0 }}>{Math.round(row.accuracy)}% ({row.correct}/{row.attempts})</div>
+        <div style={{ width: 60, fontSize: 12, color: 'var(--muted)', textAlign: 'right', flexShrink: 0 }}>{fmtMs(row.avgTimeMs)}</div>
       </div>
     )
   }
@@ -1315,69 +1282,6 @@ export default function StatsModal({ exercise, title, open, onClose = () => {} }
         <Kpi label="Avg Speed" value={kpiSource ? fmtMs(kpiSource.avgTimeMs) : '—'} />
         {streak && <Kpi label="Correct Streak" value={streak.currentCorrectStreak} sub={`best ${streak.bestCorrectStreak} · overall`} />}
         {streak && <Kpi label="Day Streak" value={streak.currentDayStreak} sub={`best ${streak.bestDayStreak} · overall`} />}
-      </div>
-
-      <div style={{ marginBottom: 22 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 6 }}>
-          <div style={{ fontSize: 12, color: 'var(--muted)' }}>{trendMetrics.includes('accuracy') && trendMetrics.includes('speed') ? 'Accuracy & Speed' : trendMetrics.includes('speed') ? 'Speed' : 'Accuracy'} — last {TREND_DAYS} days</div>
-          <MetricToggle metrics={trendMetrics} onChange={setTrendMetrics} />
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {/* Y-axis — without it, a chart of mostly-empty days (no attempts
-              that day) reads as ambiguous: is a tall bar 100% or just "some"?
-              Reads "taller = better" for both metrics when both are shown —
-              speed's own scale is relative to the fastest/slowest day in
-              this window, not an absolute time, so a shared 0–100% axis
-              still applies to both. */}
-          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', width: 28, height: TREND_HEIGHT, paddingTop: TREND_LABEL_SPACE, flexShrink: 0, fontSize: 9, color: 'var(--muted)', opacity: 0.6, textAlign: 'right' }}>
-            {trendMetrics.length === 1 && trendMetrics[0] === 'speed' ? (
-              <>
-                <span>Fastest</span>
-                <span />
-                <span>Slowest</span>
-              </>
-            ) : (
-              <>
-                <span>100%</span>
-                <span>50%</span>
-                <span>0%</span>
-              </>
-            )}
-          </div>
-          <div style={{ flex: 1, position: 'relative', height: TREND_HEIGHT }}>
-            <div style={{ position: 'absolute', top: TREND_LABEL_SPACE, left: 0, right: 0, bottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', pointerEvents: 'none' }}>
-              <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }} />
-              <div style={{ borderTop: '1px dashed rgba(255,255,255,0.08)' }} />
-              <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)' }} />
-            </div>
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: '100%', position: 'relative' }}>
-              {trend.map((t) => (
-                <div
-                  key={t.date}
-                  title={`${t.date}: ${t.attempts} attempt${t.attempts === 1 ? '' : 's'}${t.accuracy != null ? `, ${Math.round(t.accuracy)}%` : ''}${t.avgTimeMs != null ? `, ${fmtMs(t.avgTimeMs)} avg` : ''}`}
-                  style={{ flex: 1, height: `calc(100% - ${TREND_LABEL_SPACE}px)`, display: 'flex', alignItems: 'flex-end', position: 'relative' }}
-                >
-                  {trendLabel(t) != null && (
-                    <div style={{ position: 'absolute', bottom: `calc(${Math.max(6, trendLabelPct(t))}% + 2px)`, left: '50%', transform: 'translateX(-50%)', fontSize: 8, color: 'var(--muted)', opacity: 0.8, whiteSpace: 'nowrap' }}>
-                      {trendLabel(t)}
-                    </div>
-                  )}
-                  {t.attempts === 0 ? (
-                    <div style={{ width: '100%', height: '2px', background: 'rgba(255,255,255,0.12)', borderRadius: 2 }} />
-                  ) : (
-                    <div style={{ width: '100%', height: '100%', opacity: Math.max(0.4, t.attempts / maxAttemptsInTrend) }}>
-                      <MetricBars metrics={trendMetrics} accuracy={t.accuracy || 0} avgTimeMs={t.avgTimeMs} minMs={trendMinMs} maxMs={trendMaxMs} />
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--muted)', opacity: 0.6, marginTop: 3, paddingLeft: 36 }}>
-          <span>{trend[0]?.date}</span>
-          <span>{trend[trend.length - 1]?.date}</span>
-        </div>
       </div>
 
       <Explore exercise={exercise} key={exercise} />

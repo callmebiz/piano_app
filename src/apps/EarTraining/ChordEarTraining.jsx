@@ -18,6 +18,11 @@ const CHORD_LABELS = {
   m7b5: 'Half-diminished 7th',
   dim7: 'Diminished 7th'
 }
+// Short forms for the Enabled Chord Types profile field — same idea as
+// Play The Chord's Enabled Chords tracking (see practiceStats.js), so
+// comparing accuracy/speed before and after toggling a type on/off is
+// possible without the label ballooning to all 9 full names at once.
+const CHORD_ABBR = { major: 'Maj', minor: 'Min', aug: 'Aug', dim: 'Dim', '7': 'Dom7', M7: 'Maj7', m7: 'Min7', m7b5: 'm7b5', dim7: 'dim7' }
 
 // Same pool as Chord Identification, played as a block chord through the
 // speaker instead of shown on a staff.
@@ -62,7 +67,15 @@ export default function ChordEarTraining() {
     isCorrect: (prompt, answer) => answer === prompt.name,
     exercise: 'ear-chord',
     promptKey: (p) => `${p.name}-${p.root}`,
-    promptLabel: (p) => formatMatch({ root: p.root, rootName: ROOTS[p.root], type: p.name, chordSize: p.midis.length }, []).displayName
+    promptLabel: (p) => formatMatch({ root: p.root, rootName: ROOTS[p.root], type: p.name, chordSize: p.midis.length }, []).displayName,
+    fields: (p) => {
+      const enabledKeys = CHORD_TYPES.filter((t) => types[t])
+      return {
+        chordType: { value: p.name, label: CHORD_LABELS[p.name], dimension: 'Chord Type' },
+        root: { value: p.root, label: ROOTS[p.root], dimension: 'Root' },
+        enabledChordTypes: { value: enabledKeys.join(','), label: enabledKeys.map((t) => CHORD_ABBR[t]).join(' ') || 'None', dimension: 'Enabled Chord Types' }
+      }
+    }
   })
 
   useEffect(() => {

@@ -57,7 +57,16 @@ export default function IntervalEarTraining() {
     isCorrect: (prompt, answer) => answer === prompt.name,
     exercise: 'ear-interval',
     promptKey: (p) => `${p.rootMidi}-${p.semitones}`,
-    promptLabel: (p) => p.name
+    promptLabel: (p) => p.name,
+    // playbackMode tracks the Harmonic/Melodic toggle — same idea as Play
+    // The Chord's options-profile fields (Enabled Chords, Specify
+    // Inversions, …): a setting that plausibly affects accuracy/speed, so
+    // it's worth being able to filter/break down by, not just the interval
+    // itself.
+    fields: (p) => ({
+      interval: { value: p.name, label: p.name, dimension: 'Interval' },
+      playbackMode: { value: harmonic ? 'harmonic' : 'melodic', label: harmonic ? 'Harmonic' : 'Melodic', dimension: 'Playback Mode' }
+    })
   })
 
   const play = () => {

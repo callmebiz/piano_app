@@ -10,6 +10,9 @@ import StatsModal from '../../components/StatsModal'
 // out of ear training specifically (they're not part of this listen-and-
 // name set); Scales practice and Scale Identification still offer them.
 const TYPES = ['major', 'natMinor', 'harMinor', 'melMinor', 'ionian', 'dorian', 'phrygian', 'lydian', 'mixolydian', 'aeolian', 'locrian']
+// Short forms for the Enabled Scale Types profile field — same idea as
+// Play The Chord's Enabled Chords tracking (see practiceStats.js).
+const TYPE_ABBR = { major: 'Maj', natMinor: 'NMin', harMinor: 'HMin', melMinor: 'MMin', ionian: 'Ion', dorian: 'Dor', phrygian: 'Phr', lydian: 'Lyd', mixolydian: 'Mix', aeolian: 'Aeo', locrian: 'Loc' }
 
 function buildPool(enabledTypes) {
   const items = []
@@ -54,7 +57,15 @@ export default function ScaleEarTraining() {
     isCorrect: (prompt, answer) => answer === prompt.name,
     exercise: 'ear-scale',
     promptKey: (p) => `${p.name}-${p.root}`,
-    promptLabel: (p) => `${ROOTS[p.root]} ${scaleLongNames[p.name]}`
+    promptLabel: (p) => `${ROOTS[p.root]} ${scaleLongNames[p.name]}`,
+    fields: (p) => {
+      const enabledKeys = TYPES.filter((t) => types[t])
+      return {
+        scaleType: { value: p.name, label: scaleLongNames[p.name], dimension: 'Scale Type' },
+        root: { value: p.root, label: ROOTS[p.root], dimension: 'Root' },
+        enabledScaleTypes: { value: enabledKeys.join(','), label: enabledKeys.map((t) => TYPE_ABBR[t]).join(' ') || 'None', dimension: 'Enabled Scale Types' }
+      }
+    }
   })
 
   useEffect(() => {

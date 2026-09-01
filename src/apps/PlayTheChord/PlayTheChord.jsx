@@ -1020,14 +1020,16 @@ export default function PlayTheChord({ pressedNotes, setKeyboardTargetPCs = () =
                       <td key={`d-${i}`} style={{padding:8,textAlign:'center'}}>{i+1}</td>
                     ))}
                   </tr>
-                  <tr>
-                    <th style={{padding:8,textAlign:'left'}}>Note</th>
-                    {(currentOrderedPcs && currentOrderedPcs.length > 0 ? currentOrderedPcs : (current ? Array.from(current.pcs) : [])).map((pc, i) => {
-                      const present = pressedPCs.has(pc)
-                      const cellStyle = present ? { background: 'var(--accent)', color: '#000' } : {}
-                      return (<td key={`n-${i}`} style={{padding:8,textAlign:'center',...cellStyle}}>{ROOTS[pc]}</td>)
-                    })}
-                  </tr>
+                  {showNotes && (
+                    <tr>
+                      <th style={{padding:8,textAlign:'left'}}>Note</th>
+                      {(currentOrderedPcs && currentOrderedPcs.length > 0 ? currentOrderedPcs : (current ? Array.from(current.pcs) : [])).map((pc, i) => {
+                        const present = pressedPCs.has(pc)
+                        const cellStyle = present ? { background: 'var(--accent)', color: '#000' } : {}
+                        return (<td key={`n-${i}`} style={{padding:8,textAlign:'center',...cellStyle}}>{ROOTS[pc]}</td>)
+                      })}
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

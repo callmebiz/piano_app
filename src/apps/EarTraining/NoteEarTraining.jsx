@@ -48,7 +48,15 @@ export default function NoteEarTraining({ pressedNotes }) {
     isCorrect: (prompt, answer) => answer === prompt.name,
     exercise: 'ear-note',
     promptKey: (p) => String(p.midi),
-    promptLabel: (p) => p.name
+    promptLabel: (p) => p.name,
+    // Reference Note is always C today, but tracked anyway — it's a real
+    // property of the attempt, not just a fixed constant, so it's ready if
+    // the reference note ever becomes adjustable without needing to touch
+    // this again.
+    fields: (p) => ({
+      note: { value: p.name, label: p.name, dimension: 'Note' },
+      referenceNote: { value: 'C', label: 'C', dimension: 'Reference Note' }
+    })
   })
 
   // Each bar plays only its own single note — no chaining. Playing the

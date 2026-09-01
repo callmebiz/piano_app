@@ -690,10 +690,17 @@ export function getStreak(exercise) {
     prevKey = dk
   }
 
+  // Counting strictly backward from TODAY breaks the streak the instant
+  // you check stats before practicing today, even with an unbroken run
+  // through yesterday — the day isn't over yet, so that shouldn't read as
+  // "streak: 0". If today has no practice yet, start the backward count
+  // from yesterday instead; today only actually breaks the streak once a
+  // full day passes with nothing recorded.
   let currentDayStreak = 0
   if (practiceDays.length > 0) {
     const daySet = new Set(practiceDays)
     const cursor = new Date()
+    if (!daySet.has(dayKey(cursor.getTime()))) cursor.setDate(cursor.getDate() - 1)
     while (daySet.has(dayKey(cursor.getTime()))) {
       currentDayStreak += 1
       cursor.setDate(cursor.getDate() - 1)

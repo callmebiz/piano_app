@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { recordAttempt } from '../../lib/practiceStats'
+import { recordFact, getIdleThresholdMs, newSessionId } from '../../lib/practiceStats'
 
-// Generalized exercise engine shared by every Identify sub-type. Deliberately
-// small: pick a prompt, check an answer, track score + shared practice
-// stats (lifetime accuracy/speed, daily trend, streaks, and prev-prompt
-// transition timing), advance. Nothing here is note-specific.
+// Generalized exercise engine shared by every Identify sub-type AND every
+// Ear Training sub-type. Deliberately small: pick a prompt, check an
+// answer, track score + shared practice stats (lifetime accuracy/speed,
+// daily trend, streaks, prev-prompt transition timing, AND — via
+// recordFact — a real per-attempt fact row with whatever dimensions the
+// caller supplies), advance. Nothing here is note/interval/chord-specific.
 
 function randomInt(max) { return Math.floor(Math.random() * max) }
 
@@ -20,9 +22,16 @@ function pickDifferent(pool, avoidKey, keyFn) {
 }
 
 // exercise: id this exercise's stats live under in lib/practiceStats.js
-// (e.g. 'identify-note'). promptLabel: human display string for a prompt,
-// used as that bucket's label in the Stats view.
-export default function useIdentifyExercise({ pool, isCorrect, exercise, promptKey, promptLabel = (p) => promptKey(p), feedbackMs = 900 }) {
+// (e.g. 'identify-note', 'ear-note'). promptLabel: human display string for
+// a prompt, used as its bucket's label in the Stats view. `fields`
+// (optional): (prompt, answer) -> { [fieldKey]: { value, label, dimension } }
+// — every tracked dimension for this attempt (e.g. Note Ear Training's own
+// Note + Reference Note, or Chord Ear Training's Chord Type + Root +
+// whichever chord types are currently enabled), same shape PlayTheChord.jsx
+// uses. Defaults to no extra fields — a caller that doesn't pass one still
+// gets a real fact row (so Progress/Explore/Details have SOMETHING), just
+// without its own dimension breakdown.
+export default function useIdentifyExercise({ pool, isCorrect, exercise, promptKey, promptLabel = (p) => promptKey(p), fields = () => ({}), feedbackMs = 900 }) {
   const [current, setCurrent] = useState(() => (pool && pool.length > 0 ? pool[randomInt(pool.length)] : null))
   const [score, setScore] = useState({ correct: 0, total: 0 })
   const [lastResult, setLastResult] = useState(null) // { correct, answer } | null
@@ -32,14 +41,15 @@ export default function useIdentifyExercise({ pool, isCorrect, exercise, promptK
   const promptShownAtRef = useRef(performance.now())
   useEffect(() => { promptShownAtRef.current = performance.now() }, [current])
 
-  // Which prompt (by key) immediately preceded the current one — powers
-  // transition timing ("how fast after X do I get Y"). Updated in beginNext
-  // using the *outgoing* prompt, so it reflects "one before current" at the
-  // moment submitAnswer reads it, not "current" itself.
-  const lastPromptKeyRef = useRef(null)
+  // A session groups attempts made without a real gap between them — same
+  // idle-detection PlayTheChord.jsx uses (see getIdleThresholdMs), so
+  // Progress's "By Session"/"By Date" modes and Details' session list work
+  // the same way here as they do there. Fresh one on mount; rotates
+  // whenever a clean correct answer's elapsed time blows past this
+  // exercise's own adaptive idle threshold (stepped away, then came back).
+  const sessionIdRef = useRef(newSessionId())
 
   const beginNext = (avoid) => {
-    lastPromptKeyRef.current = avoid ? promptKey(avoid) : null
     const next = pickDifferent(pool, avoid ? promptKey(avoid) : null, promptKey)
     setCurrent(next)
     setLastResult(null)
@@ -63,15 +73,18 @@ export default function useIdentifyExercise({ pool, isCorrect, exercise, promptK
     setScore((s) => ({ correct: s.correct + (correct ? 1 : 0), total: s.total + 1 }))
     setLastResult({ correct, answer })
 
-    const key = promptKey(current)
     const timeMs = performance.now() - promptShownAtRef.current
-    recordAttempt({
+    const wasIdleGap = correct && timeMs > getIdleThresholdMs(exercise)
+    if (wasIdleGap) sessionIdRef.current = newSessionId()
+
+    recordFact({
       exercise,
-      buckets: [{ key, label: promptLabel(current) }],
       correct,
-      timeMs,
-      primaryKey: key,
-      fromKey: lastPromptKeyRef.current
+      timeMs: wasIdleGap ? null : timeMs,
+      promptKey: promptKey(current),
+      promptLabel: promptLabel(current),
+      fields: fields(current, answer),
+      sessionId: sessionIdRef.current
     })
 
     if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current)
